@@ -58,11 +58,11 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center;">
-        Warehouse Demonstration<br>
-        <a ref="http://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260528.zip">
-          Download Link
-        </a>
+      <td>
+        <p align="center">
+          Warehouse Demonstration
+          (<a href="http://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260528.zip">Download Link</a>)
+        </p>
       </td>
     </tr>
   </tbody>
