@@ -32,7 +32,7 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
 
 | Module Name | Repositories |
 | - | - |
-| RMF Industrial | <https:/github.com/ros-industrial/rmf_industrial> |
+| RMF Industrial | <https://github.com/ros-industrial/rmf_industrial> |
 | VDA5050 Library and support tools | <https://github.com/ros-industrial/vda5050_core><br> <https://github.com/ros-industrial/vda5050_interfaces> |
 | Unreal Engine Plugins | <https://github.com/ros-industrial/UERMF2Plugins> |
 | MAPF Robot Execution System (RES) | <https://github.com/ros-industrial/res_mapf> |
