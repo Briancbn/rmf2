@@ -1,4 +1,4 @@
-# The RMF2 Project
+# The RMF Industrial Project
 
 <p>
   <img
@@ -18,21 +18,21 @@
   />
 </p>
 
-The RMF2 project provides RMF services for Manufacturing and Logistics.
+The RMF Industrial project provides RMF services for Manufacturing and Logistics.
 
 
 ## Summary
 
-The RMF2 project tries to adopt the new [Next Gen RMF interfaces](https://github.com/open-rmf/next_gen_prototype)
+The RMF Industrial project tries to adopt the new [Next Gen RMF interfaces](https://github.com/open-rmf/next_gen_prototype)
 and provides a suite of open source modules for industrial users
 to build planning, scheduling and orchestration in large-scale simulated facility,
 showcasing RMF’s flexibility, scalability in multi-robot coordination.
 
-## RMF2 Modules
+## RMF Industrial Modules
 
 | Module Name | Repositories |
 | - | - |
-| RMF2 | <https:/github.com/ros-industrial/rmf2> |
+| RMF Industrial | <https:/github.com/ros-industrial/rmf_industrial> |
 | VDA5050 Library and support tools | <https://github.com/ros-industrial/vda5050_core><br> <https://github.com/ros-industrial/vda5050_interfaces> |
 | Unreal Engine Plugins | <https://github.com/ros-industrial/UERMF2Plugins> |
 | MAPF Robot Execution System (RES) | <https://github.com/ros-industrial/res_mapf> |
