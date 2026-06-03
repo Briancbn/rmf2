@@ -1,0 +1,10 @@
+repositories:
+  colcon/colcon-python-project:
+    type: git
+    url: https://github.com/Briancbn/colcon-python-project.git
+    version: devel
+  
+  colcon/colcon-python-project-uv:
+    type: git
+    url: https://github.com/Briancbn/colcon-python-project-uv.git
+    version: main

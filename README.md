@@ -70,4 +70,9 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
 
 ### Warehouse Demonstration
 
-Coming soon...
+coming soon...
+
+## Documentation
+
+- Guides
+  - [Install from Source (Ubuntu)](./docs/guide/install-from-source-ubuntu.md)

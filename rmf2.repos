@@ -1,0 +1,35 @@
+repositories:
+  next_gen_prototype:
+    type: git
+    url: https://github.com/open-rmf/next_gen_prototype.git
+    version: main
+  
+  res_mapf:
+    type: git
+    url: https://github.com/ros-industrial/res_mapf.git
+    version: main
+
+  vda5050_core:
+    type: git
+    url: https://github.com/ros-industrial/vda5050_core.git
+    version: main
+
+  vda5050_interfaces:
+    type: git
+    url: https://github.com/ros-industrial/vda5050_interfaces.git
+    version: main
+
+  res_mapf:
+    type: git
+    url: https://github.com/ros-industrial/res_mapf.git
+    version: main
+
+  rmf2_task_orchestrator:
+    type: git
+    url: https://github.com/ros-industrial/rmf2_task_orchestrator.git
+    version: main
+
+  rmf2_scheduler:
+    type: git
+    url: https://github.com/ros-industrial/rmf2_scheduler.git
+    version: main
