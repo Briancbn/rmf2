@@ -61,13 +61,49 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
       <td>
         <p align="center">
           Warehouse Demonstration
-          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260528.zip">Download Link</a>)
+          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260606.zip">Download Link</a>)
         </p>
       </td>
     </tr>
   </tbody>
 </table>
 
-### Warehouse Demonstration
+### Warehouse Simulation Setup
 
-Coming soon...
+Download the latest simulation
+
+```sh
+curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260606.zip
+```
+
+Unzip the simulation
+
+```sh
+unzip RMF2_SIM_20260606.zip
+cd ./RMF2_SIM_20260606
+```
+
+Start the simulation
+```sh
+./Linux/RMF2_SIM.sh
+```
+
+The simulation should start full screen matching your screen resolution.
+You can press `Alt + Enter` to toggle between fullscreen and windowed mode.
+
+You can also start the simulation in a windowed mode with specific resolution
+```sh
+./Linux/RMF2_SIM.sh -windowed -resx 1920 -resy 1080
+```
+
+The simulation controls are similar to a typical game.
+Here are the basics
+- Movement: Keyboard `W A S D` or Controller Left Stick
+  - `W`, `S` move forward and backward
+  - `A`, `D` pan left and right
+  - `Q`, `E` move up and down
+- View: Mouse  or Controller Right Stick
+  - click on the screen and hold to move around
+
+Other controls
+- Tab `M` to show Map marker
