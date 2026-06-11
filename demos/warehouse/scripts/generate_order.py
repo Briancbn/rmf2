@@ -1,6 +1,7 @@
 import json
-import networkx as nix
+import networkx as nx
 from uuid import uuid4
+import yaml
 
 from argparse import ArgumentParser
 
@@ -17,7 +18,7 @@ end_wp = args.end
 manufacturer = args.manufacturer
 serial = args.serial
 
-with open("./warehouse.lif.json", "r") as f:
+with open("../map/warehouse.lif.json", "r") as f:
     map_raw = json.load(f)
 
 graph = nx.Graph()
@@ -54,12 +55,50 @@ if not path:
     print(path)
     print("No Path Found!")
 
+def add_node_to_order(node_data, sequence_id):
+    node = {
+        "node_id": node_data["node_id"],
+        "sequence_id": sequence_id,
+        "released": True,
+        "actions": [],
+        "node_position": [{
+            "x": node_data["x"],
+            "y": node_data["y"],
+            "theta": [node_data["theta"]],
+            "allowed_deviation_x_y": [node_data["allowed_deviation_xy"]],
+            "map_id": map_raw["map_info"]["map_id"],
+            "map_description": [],
+        }],
+    }
+    order["order"]["nodes"].append(node)
+
+def add_edge_to_order(edge_data, sequence_id, start_node, end_node):
+    edge = {
+        "edge_id": edge_data["edge_id"],
+        "sequence_id": sequence_id,
+        "released": True,
+        "start_node_id": start_node,
+        "end_node_id": end_node,
+        "actions": [],
+        "edge_description": [],
+        "max_speed": [edge_data["max_speed"]],
+        "length": [edge_data["length"]],
+        "max_height": [], "min_height": [],
+        "orientation": [], "orientation_type": [],
+        "direction": [], "rotation_allowed": [], "max_rotation_speed": [],
+        "trajectory": []
+    }
+    order["order"]["edges"].append(edge)
+
+
 for idx, node_id in enumerate(path[:-1]):
     node_data = node_metadata[node_id]
-    node = {
-        ""
-    }
-    print(graph.edges[node_id, path[idx + 1]]["metadata"])
-    order["order"]["nodes"].append
+    edge_data = graph.edges[node_id, path[idx + 1]]["metadata"]
 
-print(node_metadata[path[-1]])
+    add_node_to_order(node_data, idx * 2)
+    add_edge_to_order(edge_data, idx * 2 + 1, node_id, path[idx + 1])
+
+add_node_to_order(node_metadata[path[-1]], (len(path) - 1) * 2)
+
+with open(f"../agv/sample_order_{start_wp}_{end_wp}_{manufacturer}_{serial}.yaml", "w") as f:
+    yaml.dump(order, f)
