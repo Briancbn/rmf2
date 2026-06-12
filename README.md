@@ -34,7 +34,7 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
 | - | - |
 | RMF Industrial | <https://github.com/ros-industrial/rmf_industrial> |
 | VDA5050 Library and support tools | <https://github.com/ros-industrial/vda5050_core><br> <https://github.com/ros-industrial/vda5050_interfaces> |
-| Unreal Engine Plugins | <https://github.com/ros-industrial/UERMF2Plugins> |
+| Unreal Engine Plugins | <https://github.com/ros-industrial/rmf2-unreal> |
 | MAPF Robot Execution System (RES) | <https://github.com/ros-industrial/res_mapf> |
 | Task Orchestrator | <https://github.com/ros-industrial/rmf2_task_orchestrator> |
 | Task Scheduler | <https://github.com/ros-industrial/rmf2_scheduler> |
@@ -61,7 +61,7 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
       <td>
         <p align="center">
           Warehouse Demonstration
-          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260606.zip">Download Link</a>)
+          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260611.zip">Download Link</a>)
         </p>
       </td>
     </tr>
@@ -73,14 +73,14 @@ showcasing RMF’s flexibility, scalability in multi-robot coordination.
 Download the latest simulation
 
 ```sh
-curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260606.zip
+curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260611.zip
 ```
 
 Unzip the simulation
 
 ```sh
-unzip RMF2_SIM_20260606.zip
-cd ./RMF2_SIM_20260606
+unzip RMF2_SIM_20260611.zip
+cd ./RMF2_SIM_20260611
 ```
 
 Start the simulation
