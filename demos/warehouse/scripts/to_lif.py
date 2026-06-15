@@ -17,8 +17,8 @@ class _Node(TypedDict):
     x: float
     y: float
     theta: float
-    allowed_devation_xy: float
-    allowed_devation_theta: float
+    allowed_deviation_xy: float
+    allowed_deviation_theta: float
     map_description: str
 
 class _Edge(TypedDict):
