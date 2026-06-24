@@ -28,11 +28,16 @@ and provides a suite of open source modules for industrial users
 to build planning, scheduling and orchestration in large-scale simulated facility,
 showcasing RMF’s flexibility, scalability in multi-robot coordination.
 
+## Documentation
+
+The hosted documentation is available at <https://dev.rmf-industrial.org/latest>.
+
 ## RMF Industrial Modules
 
 | Module Name | Repositories |
 | - | - |
 | RMF Industrial | <https://github.com/ros-industrial/rmf_industrial> |
+| Documentation | <https://github.com/ros-industrial/rmf2-docs> |
 | VDA5050 Library and support tools | <https://github.com/ros-industrial/vda5050_core><br> <https://github.com/ros-industrial/vda5050_interfaces> |
 | Unreal Engine Plugins | <https://github.com/ros-industrial/UERMF2Plugins> |
 | MAPF Robot Execution System (RES) | <https://github.com/ros-industrial/res_mapf> |
