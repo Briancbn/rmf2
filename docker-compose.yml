@@ -42,11 +42,33 @@ services:
   # task-orchestrator:
   # TODO
 
-  # mapf-planner:
-  # TODO
-
   # map-server:
   # TODO
+
+  mapf-planner:
+    image: ${MAPF_PLANNER_IMAGE:-ghcr.io/gametl/res_mapf_gametl/amqp-planner:main}
+    platform: linux/amd64
+    depends_on:
+      amqp-broker:
+        condition: service_healthy
+    networks:
+      - rmf2-net
+    environment:
+      AMQP_HOST: amqp-broker
+      AMQP_PORT: "${AMQP_PORT:-5672}"
+      AMQP_EXCHANGE: ${AMQP_EXCHANGE:-mapf.tasks}
+      AMQP_QUEUE: ${AMQP_QUEUE:-mapf.planner}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Headless AMQP planner: liveness == the uv/main process runs.
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pgrep -f 'main.py' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
 
   vda5050-master:
     image: ${VDA5050_MASTER_IMAGE:-ghcr.io/gametl/vda5050-python/master:main}
