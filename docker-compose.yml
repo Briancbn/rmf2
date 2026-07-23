@@ -3,15 +3,8 @@ name: rmf_stack
 services:
   mqtt-broker:
     image: eclipse-mosquitto:2
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        cat >/tmp/mosquitto.conf <<'EOF'
-        listener 1883 0.0.0.0
-        allow_anonymous true
-        persistence false
-        EOF
-        exec mosquitto -c /tmp/mosquitto.conf
+    volumes:
+      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     ports:
       - "${MQTT_PORT:-1883}:${MQTT_PORT:-1883}"
     networks:
@@ -92,21 +85,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
-    restart: unless-stopped
-
-  vda5050-adapter:
-    image: ${VDA5050_ADAPTER_IMAGE:-ghcr.io/gametl/vda5050-python/adapter:main}
-    platform: linux/amd64
-    depends_on:
-      vda5050-master:
-        condition: service_healthy
-    networks:
-      - rmf2-net
-    environment:
-      MASTER_MQTT_CLIENT_ID: ${MASTER_MQTT_CLIENT_ID:-example-master}
-      PYTHONUNBUFFERED: "1"
-      VDA5050_MANUFACTURER: ${VDA5050_MANUFACTURER:-ACME}
-      VDA5050_SERIAL_NUMBER: ${VDA5050_SERIAL_NUMBER:-AGV-001}
     restart: unless-stopped
 
   ui:
