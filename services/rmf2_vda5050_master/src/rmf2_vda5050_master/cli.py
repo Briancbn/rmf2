@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from vda5050_core.types import InstantActions, OperatingMode, State
 from vda5050_core.master import VDA5050Master
@@ -91,6 +92,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/states")
