@@ -21,7 +21,7 @@ MQTT_CLIENT_ID = os.environ.get("MASTER_MQTT_CLIENT_ID", "example-master")
 MANUFACTURER = os.environ.get("VDA5050_MANUFACTURER", "Manufacturer")
 SERIAL_NUMBER = os.environ.get("VDA5050_SERIAL_NUMBER", "S001")
 HOST = os.environ.get("HOST", "0.0.0.0")
-PORT = int(os.environ.get("PORT", "8000"))
+PORT = int(os.environ.get("PORT", "8011"))
 
 LOGGER = logging.getLogger(__name__)
 
