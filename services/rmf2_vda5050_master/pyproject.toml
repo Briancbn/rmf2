@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.141.1",
+    "pydantic-settings[toml]>=2.15.0",
     "uvicorn>=0.52.4",
     "vda5050-core>=0.1.0rc3",
 ]

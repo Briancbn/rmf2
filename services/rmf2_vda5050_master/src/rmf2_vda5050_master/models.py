@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from vda5050_core.types import InstantActions, State
@@ -14,6 +15,11 @@ _SCHEMAS = Path(__file__).parent / "schemas"
 
 PyModel.register(State, _SCHEMAS / "state.schema.json")
 PyModel.register(InstantActions, _SCHEMAS / "instantActions.schema.json")
+
+
+class AgvConfig(BaseModel):
+    manufacturer: str
+    serial_number: str
 
 
 class InstantActionsResultDict(TypedDict):
