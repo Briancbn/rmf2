@@ -1,0 +1,30 @@
+services:
+  rmf2-vda5050-master:
+    build:
+      context: ./services/rmf2_vda5050_master
+      dockerfile: Dockerfile
+    command: uv run uvicorn rmf2_vda5050_master.app:app --host 0.0.0.0 --port 8000 --reload
+    develop:
+      watch:
+        - action: sync
+          path: ./services/rmf2_vda5050_master/src
+          target: /app/src
+          ignore:
+            - __pycache__/
+        - action: rebuild
+          path: ./services/rmf2_vda5050_master/pyproject.toml
+        - action: rebuild
+          path: ./services/rmf2_vda5050_master/uv.lock
+    ports:
+      - "${RMF2_VM_PORT:-8000}:8000"
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+    networks:
+      - rmf2-net
+    environment:
+      MODE: dev
+      RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
+      RMF2_VM__MASTER_MQTT_CLIENT_ID: "example-master"
+      RMF2_VM__HOST: "0.0.0.0"
+      RMF2_VM__PORT: "8000"

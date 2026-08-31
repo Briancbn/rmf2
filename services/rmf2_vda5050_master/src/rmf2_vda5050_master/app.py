@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import api_router
 from .config import _MODE, settings
+from .database import init_db
+from .db_models import AgvRecord  # noqa: F401 — registers table with Base
 from .logger import setup_logging
 from .master import make_master
 
@@ -20,9 +22,11 @@ _redoc_url = None if _MODE == "prod" else "/redoc"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    with make_master(config) as master:
-        app.state.master = master
-        yield
+    with init_db(config.database_url) as session_factory:
+        app.state.session_factory = session_factory
+        with make_master(config, session_factory) as master:
+            app.state.master = master
+            yield
 
 
 app = FastAPI(lifespan=lifespan, docs_url=_docs_url, redoc_url=_redoc_url)

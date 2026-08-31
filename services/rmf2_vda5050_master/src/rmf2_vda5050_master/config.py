@@ -41,8 +41,9 @@ class Settings(BaseSettings):
         toml_file=_TOML_FILES,
     )
 
+    database_url: str = Field(default="sqlite:///./rmf2_vda5050_master.db", description="SQLAlchemy database URL. Defaults to a local SQLite file; use a postgresql:// URL for PostgreSQL")
     mqtt_broker: str = Field(description="MQTT broker URI (e.g. tcp://localhost:1883)")
-    master_mqtt_client_id: str | None = Field(default=None, description="MQTT client ID used by this master node. Auto-generated UUID if not set")
+    master_mqtt_client_id: str | None = Field(default=None, description="MQTT client ID used by this master node. Defaults to rmf2-vda5050-master if not set")
     agvs: list[AgvConfig] = Field(default=[], description="List of AGVs to onboard. Preferred: config.<MODE>.toml [[agvs]] table")
     host: str = Field(description="Host address for the FastAPI server to bind to")
     port: int = Field(description="Port for the FastAPI server to listen on")

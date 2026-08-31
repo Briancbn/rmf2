@@ -1,30 +1,30 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from vda5050_core.types import State
+import json
 
-from ..deps.master import MasterDeps
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
+
+from ..deps.db import DbSession
 from ..deps.logger import LoggerDeps
-from rmf2_vda5050_master.model_utils import PyModel
+from rmf2_vda5050_master.db_models import AgvRecord
 
 router = APIRouter()
 
 
 @router.get("")
-def get_all_states(master: MasterDeps, logger: LoggerDeps, skip: int = 0, limit: int = 100) -> list[PyModel[State]]:
-    agvs = list(master.get_onboarded_agvs())
-    return [
-        master.get_agv(mfr, sn).get_last_state()
-        for mfr, sn in agvs[skip : skip + limit]
-    ]
+def get_all_states(db: DbSession, logger: LoggerDeps, skip: int = 0, limit: int = 100) -> list[dict]:
+    records = db.scalars(
+        select(AgvRecord).where(AgvRecord.is_onboarded.is_(True)).offset(skip).limit(limit)
+    ).all()
+    return [json.loads(r.state_json) for r in records if r.state_json is not None]
 
 
 @router.get("/{manufacturer}/{serial_number}")
-def get_state(master: MasterDeps, logger: LoggerDeps, manufacturer: str, serial_number: str) -> PyModel[State]:
-    if not master.is_agv_onboarded(manufacturer, serial_number):
+def get_state(db: DbSession, logger: LoggerDeps, manufacturer: str, serial_number: str) -> dict:
+    record = db.get(AgvRecord, (manufacturer, serial_number))
+    if record is None or not record.is_onboarded:
         raise HTTPException(status_code=404, detail="AGV not onboarded")
-
-    state = master.get_agv(manufacturer, serial_number).get_last_state()
-    if state is None:
+    if record.state_json is None:
         raise HTTPException(status_code=404, detail="No state received yet")
-    return state
+    return json.loads(record.state_json)

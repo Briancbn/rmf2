@@ -1,7 +1,19 @@
 [[agvs]]
 manufacturer = "Manufacturer"
-serial_number = "S001"
+serial_number = "1"
 
 [[agvs]]
 manufacturer = "Manufacturer"
-serial_number = "S002"
+serial_number = "2"
+
+[[agvs]]
+manufacturer = "Manufacturer"
+serial_number = "3"
+
+[[agvs]]
+manufacturer = "Manufacturer"
+serial_number = "4"
+
+[[agvs]]
+manufacturer = "Manufacturer"
+serial_number = "5"

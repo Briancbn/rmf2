@@ -1,0 +1,27 @@
+services:
+  rmf2-vda5050-master:
+    build:
+      context: ./services/rmf2_vda5050_master
+      dockerfile: Dockerfile
+    image: ${RMF2_VM_IMAGE:-rmf2-vda5050-master:latest}
+    ports:
+      - "${RMF2_VM_PORT:-8000}:8000"
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+    networks:
+      - rmf2-net
+    environment:
+      MODE: prod
+      RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
+      RMF2_VM__MASTER_MQTT_CLIENT_ID: "${RMF2_VM__MASTER_MQTT_CLIENT_ID:?must be set for prod}"
+      RMF2_VM__HOST: "0.0.0.0"
+      RMF2_VM__PORT: "8000"
+      RMF2_VM__DATABASE_URL: "${RMF2_VM__DATABASE_URL:-sqlite:///./rmf2_vda5050_master.db}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
