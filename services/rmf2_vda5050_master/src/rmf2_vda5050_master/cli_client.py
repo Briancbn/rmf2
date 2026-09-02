@@ -221,8 +221,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--server",
-        default="http://localhost:8000",
-        help="Master server base URL (default: http://localhost:8000)",
+        default="http://localhost:8000/v1",
+        help="Master server base URL (default: http://localhost:8000/v1)",
     )
     parser.add_argument("--manufacturer", required=True)
     parser.add_argument("--serial-number", required=True)
