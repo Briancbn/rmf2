@@ -42,5 +42,13 @@ class CRUDAgvRecord(CRUDBase[AgvRecord, _AGVRecordCreate, _AGVRecordCreate]):
             db, db_obj=self.get(db, manufacturer, serial_number), obj_in=kwargs
         )
 
+    def reset_all_onboarded(self, db: Session) -> list[str]:
+        records = db.query(AgvRecord).filter(AgvRecord.is_onboarded == True).all()
+        agv_ids = [r.agv_id for r in records]
+        for r in records:
+            db.delete(r)
+        db.commit()
+        return agv_ids
+
 
 agv_record = CRUDAgvRecord(AgvRecord)

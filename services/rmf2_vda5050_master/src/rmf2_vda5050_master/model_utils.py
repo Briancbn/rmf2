@@ -84,10 +84,19 @@ class PyModel(Generic[T]):
     _registry: ClassVar[dict[type, _JsonSchema]] = {}
 
     @classmethod
-    def register(cls, vda_type: type, schema_path: str | Path) -> None:
+    def register(
+        cls,
+        vda_type: type,
+        schema_path: str | Path,
+        property_path: str | None = None,
+    ) -> None:
         text = Path(schema_path).read_text()
         text = re.sub(r",\s*([}\]])", r"\1", text)  # strip trailing commas (JSON5)
-        cls._registry[vda_type] = json.loads(text)
+        schema = json.loads(text)
+        if property_path is not None:
+            for key in property_path.split("."):
+                schema = schema[key]
+        cls._registry[vda_type] = schema
 
     def __class_getitem__(cls, vda_type: type) -> type:
         get_core_schema, get_json_schema = _make_vda_schema(

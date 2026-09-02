@@ -20,19 +20,29 @@ from .models import AgvConfig
 LOGGER = get_logger(__name__)
 
 
+def _parse_agv_id(agv_id: str) -> tuple[str, str]:
+    parts = agv_id.split("/", 1)
+    return (parts[0], parts[1]) if len(parts) == 2 else (agv_id, "")
+
+
+_FRESH_AGV_STATE = {
+    "is_onboarded": True,
+    "is_online": False,
+    "connection_json": None,
+    "connection_updated_at": None,
+    "state_json": None,
+    "state_updated_at": None,
+    "factsheet_json": None,
+    "factsheet_updated_at": None,
+    "active_order_id": None,
+}
+
+
 def save_agv(db: Session, manufacturer: str, serial_number: str) -> None:
-    kwargs = {
-        "is_onboarded": True,
-        "is_online": False,
-        "connection_json": None,
-        "connection_updated_at": None,
-        "state_json": None,
-        "state_updated_at": None,
-    }
     if crud.agv_record.get(db, manufacturer, serial_number) is None:
-        crud.agv_record.create(db, manufacturer, serial_number, **kwargs)
+        crud.agv_record.create(db, manufacturer, serial_number, **_FRESH_AGV_STATE)
     else:
-        crud.agv_record.update(db, manufacturer, serial_number, **kwargs)
+        crud.agv_record.update(db, manufacturer, serial_number, **_FRESH_AGV_STATE)
 
 
 def _make_state_request(agv: AgvConfig) -> InstantActions:
@@ -118,11 +128,54 @@ class _MasterObserver:
             state_updated_at=datetime.fromtimestamp(
                 state.header.timestamp, tz=timezone.utc
             ),
+            active_order_id=state.order_id or None,
         )
         if not updated:
             LOGGER.debug("Ignoring state for unregistered AGV: %s", agv_id)
             return
         LOGGER.info("State updated: %s", agv_id)
+
+    def on_order_complete(self, agv_id: str, order_id: str) -> None:
+        manufacturer, serial_number = agv_id.split("/", 1)
+        with self._session_factory() as session:
+            r = crud.order_record.get_latest_by_order_id(
+                session, manufacturer, serial_number, order_id
+            )
+            if r is not None:
+                crud.order_record.update(
+                    session,
+                    db_obj=r,
+                    obj_in={"completed_at": datetime.now(timezone.utc)},
+                )
+        LOGGER.info("Order completed: %s — %s", agv_id, order_id)
+
+    def on_order_rejected(self, agv_id: str, order_id: str, errors) -> None:
+        manufacturer, serial_number = agv_id.split("/", 1)
+        with self._session_factory() as session:
+            r = crud.order_record.get_latest_by_order_id(
+                session, manufacturer, serial_number, order_id
+            )
+            if r is not None:
+                crud.order_record.update(
+                    session,
+                    db_obj=r,
+                    obj_in={"rejected_at": datetime.now(timezone.utc)},
+                )
+        LOGGER.warning("Order rejected: %s — %s", agv_id, order_id)
+
+    def on_factsheet(self, agv_id: str, factsheet) -> None:
+        updated = self._update_if_registered(
+            factsheet.header.manufacturer,
+            factsheet.header.serial_number,
+            factsheet_json=json.dumps(factsheet.json()),
+            factsheet_updated_at=datetime.fromtimestamp(
+                factsheet.header.timestamp, tz=timezone.utc
+            ),
+        )
+        if not updated:
+            LOGGER.debug("Ignoring factsheet for unregistered AGV: %s", agv_id)
+            return
+        LOGGER.info("Factsheet updated: %s", agv_id)
 
 
 @contextmanager
@@ -140,28 +193,16 @@ def make_master(
     master.on_connection_broken(observer.on_connection_broken)
     master.on_connection(observer.on_connection)
     master.on_state(observer.on_state)
+    master.on_factsheet(observer.on_factsheet)
+    master.on_order_complete(observer.on_order_complete)
+    master.on_order_rejected(observer.on_order_rejected)
 
     master.connect()
 
     with session_factory() as session:
-        last_agv_record = crud.agv_record.get_multi_from_attr(
-            session, {"is_onboarded": True}
-        )
-        config_keys = {(agv.manufacturer, agv.serial_number) for agv in config.agvs}
-        stale_keys = [
-            (r.manufacturer, r.serial_number)
-            for r in last_agv_record
-            if (r.manufacturer, r.serial_number) not in config_keys
-        ]
-        for mfr, sn in stale_keys:
-            LOGGER.warning(
-                "Stale onboarded AGV not in current config, offboarding: %s/%s", mfr, sn
-            )
-        if stale_keys:
-            for mfr, sn in stale_keys:
-                crud.agv_record.update(
-                    session, mfr, sn, is_onboarded=False, is_online=False
-                )
+        reset_ids = crud.agv_record.reset_all_onboarded(session)
+        for agv_id in reset_ids:
+            LOGGER.warning("Reset stale onboarded AGV on startup: %s", agv_id)
 
     with session_factory() as session:
         for agv in config.agvs:

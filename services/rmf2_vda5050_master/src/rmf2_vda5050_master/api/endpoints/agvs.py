@@ -30,11 +30,16 @@ def get_onboarded_agvs(
     limit: int = 100,
     show_state: bool = False,
     show_connection: bool = False,
+    show_factsheet: bool = False,
 ) -> list[AgvStatus]:
     records = crud.agv_record.get_multi_from_attr(
         db, {"is_onboarded": True}, skip=skip, limit=limit
     )
-    ctx = {"show_state": show_state, "show_connection": show_connection}
+    ctx = {
+        "show_state": show_state,
+        "show_connection": show_connection,
+        "show_factsheet": show_factsheet,
+    }
     return [AgvStatus.model_validate(record, context=ctx) for record in records]
 
 
@@ -46,11 +51,16 @@ def get_agv(
     logger: LoggerDeps,
     show_state: bool = False,
     show_connection: bool = False,
+    show_factsheet: bool = False,
 ) -> AgvStatus:
     record = crud.agv_record.get(db, manufacturer, serial_number)
     if record is None or not record.is_onboarded:
         raise HTTPException(status_code=404, detail="AGV not onboarded")
-    ctx = {"show_state": show_state, "show_connection": show_connection}
+    ctx = {
+        "show_state": show_state,
+        "show_connection": show_connection,
+        "show_factsheet": show_factsheet,
+    }
     return AgvStatus.model_validate(record, context=ctx)
 
 
