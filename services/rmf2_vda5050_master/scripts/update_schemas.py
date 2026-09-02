@@ -21,6 +21,7 @@ SCHEMAS: dict[str, str] = {
     "state.schema.json": "state.schema.json",
     "order.schema.json": "order.schema",
     "factsheet.schema.json": "factsheet.schema",
+    "visualization.schema.json": "visualization.schema",
 }
 
 SCHEMAS_DIR.mkdir(parents=True, exist_ok=True)

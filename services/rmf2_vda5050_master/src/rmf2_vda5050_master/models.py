@@ -28,6 +28,7 @@ from vda5050_core.types import (
     InstantActions,
     Order,
     State,
+    Visualization,
 )
 
 from .model_utils import FromVda5050, PyModel
@@ -42,6 +43,7 @@ PyModel.register(
 )
 PyModel.register(Order, _SCHEMAS / "order.schema.json")
 PyModel.register(Factsheet, _SCHEMAS / "factsheet.schema.json")
+PyModel.register(Visualization, _SCHEMAS / "visualization.schema.json")
 
 _connection_adapter = TypeAdapter(PyModel[Connection])
 
