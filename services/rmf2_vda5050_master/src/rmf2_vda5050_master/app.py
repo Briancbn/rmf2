@@ -12,12 +12,12 @@ from .db_models import AgvRecord  # noqa: F401 — registers table with Base
 from .logger import setup_logging
 from .master import make_master
 
-
 config = settings()
 
 # disable docs for prod
 _docs_url = None if _MODE == "prod" else "/docs"
 _redoc_url = None if _MODE == "prod" else "/redoc"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,85 +1,162 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, HTTPException
 
-from sqlalchemy import select
-from vda5050_core.master import OnboardSpec
+from rmf2_vda5050_master import crud
+from rmf2_vda5050_master.master import save_agv
+from rmf2_vda5050_master.models import (
+    AgvStatus,
+    BatchOnboardResult,
+    OffboardSpec,
+    OnboardSpec,
+)
 
 from ..deps.db import DbSession
 from ..deps.logger import LoggerDeps
 from ..deps.master import MasterDeps
-from rmf2_vda5050_master.db_models import AgvRecord
-from rmf2_vda5050_master.master import _upsert_agv
-from rmf2_vda5050_master.models import AgvConfig
 
 router = APIRouter()
 
 
-@router.get("")
-def get_onboarded_agvs(db: DbSession, logger: LoggerDeps, skip: int = 0, limit: int = 100) -> list[AgvConfig]:
-    records = db.scalars(
-        select(AgvRecord)
-        .where(AgvRecord.is_onboarded.is_(True))
-        .offset(skip)
-        .limit(limit)
-    ).all()
-    return [AgvConfig(manufacturer=r.manufacturer, serial_number=r.serial_number) for r in records]
+def _make_agv_id(manufacturer: str, serial_number: str) -> str:
+    return f"{manufacturer}/{serial_number}"
+
+
+@router.get("", response_model_exclude_none=True)
+def get_onboarded_agvs(
+    db: DbSession,
+    logger: LoggerDeps,
+    skip: int = 0,
+    limit: int = 100,
+    show_state: bool = False,
+    show_connection: bool = False,
+) -> list[AgvStatus]:
+    records = crud.agv_record.get_multi_from_attr(
+        db, {"is_onboarded": True}, skip=skip, limit=limit
+    )
+    ctx = {"show_state": show_state, "show_connection": show_connection}
+    return [AgvStatus.model_validate(record, context=ctx) for record in records]
+
+
+@router.get("/{manufacturer}/{serial_number}", response_model_exclude_none=True)
+def get_agv(
+    manufacturer: str,
+    serial_number: str,
+    db: DbSession,
+    logger: LoggerDeps,
+    show_state: bool = False,
+    show_connection: bool = False,
+) -> AgvStatus:
+    record = crud.agv_record.get(db, manufacturer, serial_number)
+    if record is None or not record.is_onboarded:
+        raise HTTPException(status_code=404, detail="AGV not onboarded")
+    ctx = {"show_state": show_state, "show_connection": show_connection}
+    return AgvStatus.model_validate(record, context=ctx)
+
+
+@router.post("/onboard")
+def onboard_agvs(
+    specs: list[OnboardSpec], master: MasterDeps, db: DbSession, logger: LoggerDeps
+) -> BatchOnboardResult:
+    for spec in specs:
+        save_agv(db, spec.manufacturer, spec.serial_number)
+    vda_result = master.onboard_agv_batch([spec.to_vda5050() for spec in specs])
+    for spec in vda_result.onboarded:
+        logger.info(
+            "Onboarded AGV: %s", _make_agv_id(spec.manufacturer, spec.serial_number)
+        )
+    for spec in vda_result.failed:
+        logger.error(
+            "Failed to onboard AGV: %s",
+            _make_agv_id(spec.manufacturer, spec.serial_number),
+        )
+        crud.agv_record.update(
+            db, spec.manufacturer, spec.serial_number, is_onboarded=False
+        )
+    return BatchOnboardResult.from_vda5050(vda_result)
 
 
 @router.post("/{manufacturer}/{serial_number}/onboard")
-def onboard_agv(manufacturer: str, serial_number: str, master: MasterDeps, db: DbSession, logger: LoggerDeps) -> dict:
-    record = db.get(AgvRecord, (manufacturer, serial_number))
+def onboard_agv(
+    manufacturer: str,
+    serial_number: str,
+    master: MasterDeps,
+    db: DbSession,
+    logger: LoggerDeps,
+) -> OnboardSpec:
+    record = crud.agv_record.get(db, manufacturer, serial_number)
     if record is not None and record.is_onboarded:
         raise HTTPException(status_code=409, detail="AGV already onboarded")
 
-    spec = OnboardSpec()
-    spec.manufacturer = manufacturer
-    spec.serial_number = serial_number
-
-    result = master.onboard_agv_batch([spec])
-    if result.failed:
-        logger.error("Failed to onboard AGV: %s/%s", manufacturer, serial_number)
-        raise HTTPException(status_code=502, detail=f"Master failed to onboard {manufacturer}/{serial_number}")
-
-    default_conn = json.dumps({
-        "headerId": 0,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "2.0.0",
-        "manufacturer": manufacturer,
-        "serialNumber": serial_number,
-        "connectionState": "OFFLINE",
-    })
-    _upsert_agv(
-        db,
-        manufacturer,
-        serial_number,
-        is_onboarded=True,
-        is_online=False,
-        connection_json=default_conn,
-        connection_updated_at=datetime.now(timezone.utc),
+    result = master.onboard_agv_batch(
+        [
+            OnboardSpec(
+                manufacturer=manufacturer, serial_number=serial_number
+            ).to_vda5050()
+        ]
     )
-    db.commit()
-    logger.info("Onboarded AGV: %s/%s", manufacturer, serial_number)
-    return {"manufacturer": manufacturer, "serial_number": serial_number, "onboarded": True}
+    if result.failed:
+        logger.error(
+            "Failed to onboard AGV: %s", _make_agv_id(manufacturer, serial_number)
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Master failed to onboard {manufacturer}/{serial_number}",
+        )
+
+    save_agv(db, manufacturer, serial_number)
+    logger.info("Onboarded AGV: %s", _make_agv_id(manufacturer, serial_number))
+    return OnboardSpec(manufacturer=manufacturer, serial_number=serial_number)
+
+
+@router.post("/offboard")
+def offboard_agvs(
+    specs: list[OffboardSpec], master: MasterDeps, db: DbSession, logger: LoggerDeps
+) -> int:
+    to_offboard = []
+    for spec in specs:
+        record = crud.agv_record.get(db, spec.manufacturer, spec.serial_number)
+        if record is None or not record.is_onboarded:
+            logger.warning(
+                "AGV not onboarded, skipping: %s",
+                _make_agv_id(spec.manufacturer, spec.serial_number),
+            )
+        else:
+            to_offboard.append(spec)
+    if not to_offboard:
+        return 0
+    count = master.offboard_agv_batch(
+        [(spec.manufacturer, spec.serial_number) for spec in to_offboard]
+    )
+    for spec in to_offboard:
+        crud.agv_record.update(
+            db,
+            spec.manufacturer,
+            spec.serial_number,
+            is_onboarded=False,
+            is_online=False,
+        )
+        logger.info(
+            "Offboarded AGV: %s", _make_agv_id(spec.manufacturer, spec.serial_number)
+        )
+    return count
 
 
 @router.post("/{manufacturer}/{serial_number}/offboard")
-def offboard_agv(manufacturer: str, serial_number: str, master: MasterDeps, db: DbSession, logger: LoggerDeps) -> dict:
-    record = db.get(AgvRecord, (manufacturer, serial_number))
+def offboard_agv(
+    manufacturer: str,
+    serial_number: str,
+    master: MasterDeps,
+    db: DbSession,
+    logger: LoggerDeps,
+) -> int:
+    record = crud.agv_record.get(db, manufacturer, serial_number)
     if record is None or not record.is_onboarded:
         raise HTTPException(status_code=404, detail="AGV not onboarded")
 
-    master.offboard_agv_batch([(manufacturer, serial_number)])
-    _upsert_agv(
-        db,
-        manufacturer,
-        serial_number,
-        is_onboarded=False,
-        is_online=False,
+    count = master.offboard_agv_batch([(manufacturer, serial_number)])
+    crud.agv_record.update(
+        db, manufacturer, serial_number, is_onboarded=False, is_online=False
     )
-    db.commit()
-    logger.info("Offboarded AGV: %s/%s", manufacturer, serial_number)
-    return {"manufacturer": manufacturer, "serial_number": serial_number, "onboarded": False}
+    logger.info("Offboarded AGV: %s", _make_agv_id(manufacturer, serial_number))
+    return count

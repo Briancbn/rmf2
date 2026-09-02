@@ -3,24 +3,23 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+
+from rmf2_vda5050_master import crud
+from rmf2_vda5050_master.models import DeviceConnection
 
 from ..deps.db import DbSession
 from ..deps.logger import LoggerDeps
-from rmf2_vda5050_master.db_models import AgvRecord
-from rmf2_vda5050_master.models import DeviceConnection
 
 router = APIRouter()
 
 
 @router.get("")
-def get_all_connections(db: DbSession, logger: LoggerDeps, skip: int = 0, limit: int = 100) -> list[DeviceConnection]:
-    records = db.scalars(
-        select(AgvRecord)
-        .where(AgvRecord.is_onboarded.is_(True))
-        .offset(skip)
-        .limit(limit)
-    ).all()
+def get_all_connections(
+    db: DbSession, logger: LoggerDeps, skip: int = 0, limit: int = 100
+) -> list[DeviceConnection]:
+    records = crud.agv_record.get_multi_from_attr(
+        db, {"is_onboarded": True}, skip=skip, limit=limit
+    )
     return [
         DeviceConnection.model_validate(json.loads(r.connection_json))
         for r in records
@@ -29,8 +28,10 @@ def get_all_connections(db: DbSession, logger: LoggerDeps, skip: int = 0, limit:
 
 
 @router.get("/{manufacturer}/{serial_number}")
-def get_connection(db: DbSession, logger: LoggerDeps, manufacturer: str, serial_number: str) -> DeviceConnection:
-    record = db.get(AgvRecord, (manufacturer, serial_number))
+def get_connection(
+    db: DbSession, logger: LoggerDeps, manufacturer: str, serial_number: str
+) -> DeviceConnection:
+    record = crud.agv_record.get(db, manufacturer, serial_number)
     if record is None or not record.is_onboarded:
         raise HTTPException(status_code=404, detail="AGV not onboarded")
     if record.connection_json is None:
