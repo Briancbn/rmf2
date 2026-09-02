@@ -22,6 +22,7 @@ _redoc_url = None if _MODE == "prod" else "/redoc"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    app.state.layout_result = None
     with init_db(config.database_url) as session_factory:
         app.state.session_factory = session_factory
         with make_master(config, session_factory) as master:

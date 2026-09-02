@@ -1,6 +1,14 @@
 from fastapi import APIRouter
 
-from .endpoints import agvs, connections, factsheets, instant_actions, orders, states
+from .endpoints import (
+    agvs,
+    connections,
+    factsheets,
+    instant_actions,
+    layout,
+    orders,
+    states,
+)
 
 api_router = APIRouter()
 api_router.include_router(agvs.router, prefix="/agvs", tags=["agvs"])
@@ -13,3 +21,4 @@ api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
 api_router.include_router(
     instant_actions.router, prefix="/instant_actions", tags=["instant_actions"]
 )
+api_router.include_router(layout.router, prefix="/layout", tags=["layout"])

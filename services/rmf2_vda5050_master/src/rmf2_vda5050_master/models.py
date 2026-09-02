@@ -16,7 +16,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self, TypedDict
+from typing_extensions import Self
 from vda5050_core.master import (
     OnboardSpec as _VdaOnboardSpec,
 )
@@ -118,9 +118,9 @@ class OrderAssignmentResultModel(FromVda5050):
     errors: list[PyModel[Error]]
 
 
-class InstantActionsResultDict(TypedDict):
+class InstantActionAssignmentResult(FromVda5050):
     decision: str
-    errors: list[dict]
+    errors: list[PyModel[Error]]
 
 
 class DeviceConnection(BaseModel):

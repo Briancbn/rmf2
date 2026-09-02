@@ -8,6 +8,29 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 
 
+class LifRecord(Base):
+    """Stores the currently active LIF layout. At most one row (id=1)."""
+
+    __tablename__ = "lif_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    lif_json: Mapped[str] = mapped_column(Text)
+    loaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # JSON array of all layoutId strings from lif_json, kept in sync for fast lookup
+    layout_ids_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True, default=None
+    )
+    # metaInformation fields stored individually for easy lookup
+    project_identification: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    creator: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    export_timestamp: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    lif_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+
+
 class OrderRecord(Base):
     __tablename__ = "order_records"
 

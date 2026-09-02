@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, TypeVar
 
+from fastapi import Body
 from pydantic import BaseModel, GetPydanticSchema, model_validator
 from pydantic_core import core_schema
 from typing_extensions import Self
@@ -14,6 +15,18 @@ from typing_extensions import Self
 T = TypeVar("T")
 
 _JsonSchema = dict[str, Any]
+
+
+_BASIC_TYPES = (str, int, float, bool, list, dict, type(None))
+
+
+def _coerce_pybind_value(v: Any) -> Any:
+    """Convert pybind11 enums (and similar) to their .name string."""
+    if isinstance(v, _BASIC_TYPES):
+        return v
+    if hasattr(v, "name"):
+        return v.name
+    return v
 
 
 class FromVda5050(BaseModel):
@@ -28,7 +41,10 @@ class FromVda5050(BaseModel):
     @classmethod
     def _coerce_from_pybind(cls, data: Any) -> Any:
         if not isinstance(data, (dict, BaseModel)):
-            return {field: getattr(data, field) for field in cls.model_fields}
+            return {
+                field: _coerce_pybind_value(getattr(data, field))
+                for field in cls.model_fields
+            }
         return data
 
     @classmethod
@@ -102,4 +118,6 @@ class PyModel(Generic[T]):
         get_core_schema, get_json_schema = _make_vda_schema(
             vda_type, cls._registry.get(vda_type)
         )
-        return Annotated[vda_type, GetPydanticSchema(get_core_schema, get_json_schema)]
+        return Annotated[
+            vda_type, GetPydanticSchema(get_core_schema, get_json_schema), Body()
+        ]

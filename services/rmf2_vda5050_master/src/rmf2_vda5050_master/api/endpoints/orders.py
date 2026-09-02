@@ -87,7 +87,7 @@ def _do_assign(
         manufacturer=manufacturer,
         serial_number=serial_number,
         order_id=order.order_id,
-        order_update_id=order.header.update_id,
+        order_update_id=order.order_update_id,
         order_json=json.dumps(order.json()),
         assigned_at=datetime.now(timezone.utc),
     )

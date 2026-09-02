@@ -182,8 +182,10 @@ class _MasterObserver:
 def make_master(
     config: Settings, session_factory: sessionmaker[Session]
 ) -> Generator[VDA5050Master, None, None]:
+    # --- Build master and register observer callbacks ---
     base_id = config.master_mqtt_client_id or "rmf2-vda5050-master"
     master_id = f"{base_id}-{os.getpid()}"
+    LOGGER.info("Starting master %s", master_id)
     mqtt_client = create_mqtt_client(config.mqtt_broker, master_id)
     master = VDA5050Master.make(mqtt_client)
     observer = _MasterObserver(master, config.agvs, session_factory)
@@ -197,17 +199,57 @@ def make_master(
     master.on_order_complete(observer.on_order_complete)
     master.on_order_rejected(observer.on_order_rejected)
 
+    # --- Connect to MQTT broker ---
+    LOGGER.info("Connecting to MQTT broker %s", config.mqtt_broker)
     master.connect()
+    LOGGER.info("Connected to MQTT broker")
 
+    # --- Load LIF layout (optional) ---
+    _lif_json: str | None = None
+    if config.map_mode == "local" and config.map_path is not None:
+        _lif_json = config.map_path.read_text()
+        result = master.load_layout_from_config(str(config.map_path))
+        if result.get("errors"):
+            LOGGER.warning(
+                "Layout loaded with errors from %s: %s",
+                config.map_path,
+                result["errors"],
+            )
+        else:
+            LOGGER.info("Layout loaded from %s", config.map_path)
+    elif config.map_mode == "server" and config.map_server_url is not None:
+        raise NotImplementedError(
+            "Loading layout from an external map server is not yet implemented"
+        )
+    elif config.map_mode == "server" and config.map_server_url is None:
+        LOGGER.warning(
+            "map_mode is 'server' but map_server_url is not set — no layout loaded"
+        )
+
+    if _lif_json is not None:
+        with session_factory() as session:
+            crud.lif_record.set_current(session, _lif_json, datetime.now(timezone.utc))
+
+    # --- Reset stale DB records from a previous (possibly crashed) session ---
+    # Any AGV left as is_onboarded=True from a prior run is deleted so save_agv
+    # can recreate them with a clean state below.
     with session_factory() as session:
         reset_ids = crud.agv_record.reset_all_onboarded(session)
         for agv_id in reset_ids:
             LOGGER.warning("Reset stale onboarded AGV on startup: %s", agv_id)
 
+    # --- Create fresh DB records for all configured AGVs ---
+    LOGGER.info("Initialising DB records for %d configured AGV(s)", len(config.agvs))
     with session_factory() as session:
         for agv in config.agvs:
             save_agv(session, agv.manufacturer, agv.serial_number)
+            LOGGER.debug(
+                "DB record ready for %s/%s", agv.manufacturer, agv.serial_number
+            )
 
+    # --- Onboard AGVs with the master ---
+    # DB records are created first so that callbacks (on_connection, on_state, …)
+    # can persist data as soon as the AGV connects.
     specs = []
     for agv in config.agvs:
         spec = OnboardSpec()
@@ -237,13 +279,17 @@ def make_master(
                     is_onboarded=False,
                 )
 
+    LOGGER.info("Master ready")
     try:
         yield master
     finally:
+        # --- Graceful shutdown: offboard all AGVs and mark DB records ---
+        LOGGER.info("Shutting down master, offboarding %d AGV(s)", len(config.agvs))
         master.offboard_agv_batch(
             [(agv.manufacturer, agv.serial_number) for agv in config.agvs]
         )
         master.disconnect()
+        LOGGER.info("Disconnected from MQTT broker")
         with session_factory() as session:
             for agv in config.agvs:
                 crud.agv_record.update(

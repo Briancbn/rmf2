@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import (
@@ -57,6 +59,21 @@ class Settings(BaseSettings):
     host: str = Field(description="Host address for the FastAPI server to bind to")
     port: int = Field(description="Port for the FastAPI server to listen on")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    map_mode: Literal["local", "server"] = Field(
+        default="local",
+        description=(
+            "'local': load LIF from map_path at startup (optional); REST POST /layout also available. "
+            "'server': fetch LIF from a live external map server at map_url at startup."
+        ),
+    )
+    map_path: Path | None = Field(
+        default=None,
+        description="(local mode) Path to a LIF (Layout Interchange Format) JSON file to load at startup",
+    )
+    map_server_url: str | None = Field(
+        default=None,
+        description="(server mode) URL of a live external map server to fetch the LIF JSON from at startup",
+    )
 
     @classmethod
     def settings_customise_sources(
