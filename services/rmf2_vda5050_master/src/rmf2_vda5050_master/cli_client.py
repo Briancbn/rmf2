@@ -112,6 +112,101 @@ def _build_order(
     }
 
 
+def _amqp_publish_and_wait(
+    amqp_url: str,
+    exchange: str,
+    publish_key: str,
+    result_key: str,
+    payload: dict,
+    timeout: float,
+    label: str,
+) -> None:
+    """Publish ``payload`` to ``publish_key`` and wait up to ``timeout`` seconds for an error on ``result_key``."""
+    import time
+
+    try:
+        import pika
+    except ImportError:
+        print("pika is required for AMQP: pip install pika", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        conn = pika.BlockingConnection(pika.URLParameters(amqp_url))
+    except (pika.exceptions.AMQPConnectionError, OSError) as exc:
+        print(f"AMQP connection failed ({amqp_url}): {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        channel = conn.channel()
+        channel.exchange_declare(exchange=exchange, exchange_type="topic", durable=True)
+
+        q = channel.queue_declare(queue="", exclusive=True)
+        channel.queue_bind(
+            exchange=exchange, queue=q.method.queue, routing_key=result_key
+        )
+
+        channel.basic_publish(
+            exchange=exchange,
+            routing_key=publish_key,
+            body=json.dumps(payload).encode(),
+            properties=pika.BasicProperties(content_type="application/json"),
+        )
+        print(f"{label} sent via AMQP to {publish_key}")
+
+        received: list[dict] = []
+
+        def _on_message(ch, method, _props, body: bytes) -> None:
+            received.append(json.loads(body))
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
+        channel.basic_consume(
+            queue=q.method.queue, on_message_callback=_on_message, auto_ack=False
+        )
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not received:
+            conn.process_data_events(time_limit=0.1)
+    except pika.exceptions.AMQPError as exc:
+        print(f"AMQP error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        conn.close()
+
+    if not received:
+        print("No result received within timeout — order may still be processing")
+        return
+    result = received[0]
+    print(f"Result: {json.dumps(result, indent=2)}")
+    if result.get("errors"):
+        sys.exit(1)
+
+
+def _send_order_amqp(args: argparse.Namespace, order: dict) -> None:
+    prefix = args.amqp_topic_prefix.replace("/", ".")
+    _amqp_publish_and_wait(
+        amqp_url=args.amqp_url,
+        exchange=args.amqp_exchange,
+        publish_key=f"{prefix}.assign_order",
+        result_key=f"{prefix}.assign_order_result",
+        payload=order,
+        timeout=args.amqp_timeout,
+        label=f"Order {order['orderId']}",
+    )
+
+
+def _send_instant_action_amqp(args: argparse.Namespace, payload: dict) -> None:
+    prefix = args.amqp_topic_prefix.replace("/", ".")
+    _amqp_publish_and_wait(
+        amqp_url=args.amqp_url,
+        exchange=args.amqp_exchange,
+        publish_key=f"{prefix}.assign_instant_actions",
+        result_key=f"{prefix}.assign_instant_actions_result",
+        payload=payload,
+        timeout=args.amqp_timeout,
+        label=f"InstantActions '{args.action_type}'",
+    )
+
+
 def cmd_send_order(args: argparse.Namespace) -> None:
     try:
         import networkx as nx
@@ -167,6 +262,11 @@ def cmd_send_order(args: argparse.Namespace) -> None:
     order = _build_order(
         args.manufacturer, args.serial_number, path, graph, node_map, map_id
     )
+
+    if args.transport == "amqp":
+        _send_order_amqp(args, order)
+        return
+
     url = f"{base}/orders/{args.manufacturer}/{args.serial_number}/assign"
     print(f"Sending order {order['orderId']} ...")
     result = _post_json(url, order)
@@ -179,8 +279,6 @@ def cmd_send_order(args: argparse.Namespace) -> None:
 
 
 def cmd_send_instant_action(args: argparse.Namespace) -> None:
-    base = args.server.rstrip("/")
-
     action: dict = {
         "actionType": args.action_type,
         "actionId": args.action_id or str(uuid4()),
@@ -200,6 +298,11 @@ def cmd_send_instant_action(args: argparse.Namespace) -> None:
         "actions": [action],
     }
 
+    if args.transport == "amqp":
+        _send_instant_action_amqp(args, payload)
+        return
+
+    base = args.server.rstrip("/")
     url = f"{base}/instant_actions/{args.manufacturer}/{args.serial_number}/assign"
     print(
         f"Sending instant action '{args.action_type}' to {args.manufacturer}/{args.serial_number} ..."
@@ -226,6 +329,35 @@ def main() -> None:
     )
     parser.add_argument("--manufacturer", required=True)
     parser.add_argument("--serial-number", required=True)
+    parser.add_argument(
+        "--transport",
+        choices=["http", "amqp"],
+        default="http",
+        help="Transport to use (default: http)",
+    )
+    parser.add_argument(
+        "--amqp-url",
+        default="amqp://localhost",
+        metavar="URL",
+        help="AMQP broker URL (default: amqp://localhost)",
+    )
+    parser.add_argument(
+        "--amqp-exchange",
+        default="rmf2",
+        help="AMQP exchange name (default: rmf2)",
+    )
+    parser.add_argument(
+        "--amqp-topic-prefix",
+        default="rmf2_vda5050_master/v1",
+        help="Topic prefix (default: rmf2_vda5050_master/v1)",
+    )
+    parser.add_argument(
+        "--amqp-timeout",
+        type=float,
+        default=3.0,
+        metavar="SECONDS",
+        help="Seconds to wait for an error response (default: 3.0)",
+    )
 
     sub = parser.add_subparsers(dest="verb", required=True)
 

@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import (
     BaseSettings,
     CliSettingsSource,
@@ -24,6 +24,49 @@ _ENV_FILES = [".env", f".env.{_MODE}"]
 _TOML_FILES = ["config.toml", f"config.{_MODE}.toml"]
 
 
+class AmqpSettings(BaseModel):
+    """AMQP transport settings. Set ``enabled = true`` to activate.
+
+    TOML::
+
+        [amqp]
+        enabled = true
+        url = "amqp://guest:guest@localhost/"
+        exchange = "rmf2"
+
+    Env vars (prefix ``RMF2_VM__AMQP__``)::
+
+        RMF2_VM__AMQP__ENABLED=true
+        RMF2_VM__AMQP__URL=amqp://guest:guest@localhost/
+        RMF2_VM__AMQP__EXCHANGE=rmf2
+    """
+
+    enabled: bool = True
+    url: str = "amqp://guest:guest@localhost/"
+    exchange: str = "rmf2"
+
+
+class ZenohSettings(BaseModel):
+    """Zenoh transport settings. Set ``enabled = true`` to activate.
+
+    TOML::
+
+        [zenoh]
+        enabled = true
+        endpoints = ["tcp/localhost:7447"]
+
+    Env vars (prefix ``RMF2_VM__ZENOH__``)::
+
+        RMF2_VM__ZENOH__ENABLED=true
+        RMF2_VM__ZENOH__ENDPOINTS=["tcp/localhost:7447"]
+
+    Leave ``endpoints`` empty to use the default Zenoh peer-to-peer discovery.
+    """
+
+    enabled: bool = False
+    endpoints: list[str] = Field(default_factory=list)
+
+
 class Settings(BaseSettings):
     """RMF2 VDA5050 Master service configuration.
 
@@ -40,6 +83,7 @@ class Settings(BaseSettings):
         env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         env_prefix="RMF2_VM__",
+        env_nested_delimiter="__",
         toml_file=_TOML_FILES,
     )
 
@@ -59,6 +103,16 @@ class Settings(BaseSettings):
     host: str = Field(description="Host address for the FastAPI server to bind to")
     port: int = Field(description="Port for the FastAPI server to listen on")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    amqp: AmqpSettings = Field(
+        default_factory=AmqpSettings, description="AMQP transport settings"
+    )
+    zenoh: ZenohSettings = Field(
+        default_factory=ZenohSettings, description="Zenoh transport settings"
+    )
+    heartbeat_interval: float = Field(
+        default=5.0,
+        description="Interval in seconds for heartbeat callbacks. Set to 0 to disable.",
+    )
     map_mode: Literal["local", "server"] = Field(
         default="local",
         description=(

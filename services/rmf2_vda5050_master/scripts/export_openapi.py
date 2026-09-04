@@ -8,7 +8,8 @@ from pathlib import Path
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "-o", "--output-dir",
+        "-o",
+        "--output-dir",
         default=".",
         help="Directory to write openapi.json into (default: current directory)",
     )

@@ -115,12 +115,33 @@ class OrderStatus(BaseModel):
         return json.loads(value) if value is not None else None
 
 
+class OrderBatch(BaseModel):
+    orders: list[PyModel[Order]]
+
+
 class OrderAssignmentResultModel(FromVda5050):
     decision: str
     errors: list[PyModel[Error]]
 
 
+class OrderAssignmentResult(BaseModel):
+    """Published on the ``assign_order_error`` transport topic when assignment is rejected."""
+
+    order_id: str
+    order_update_id: int
+    decision: str
+    errors: list[PyModel[Error]]
+
+
 class InstantActionAssignmentResult(FromVda5050):
+    decision: str
+    errors: list[PyModel[Error]]
+
+
+class InstantActionsResult(BaseModel):
+    """Published on the ``assign_instant_actions_result`` transport topic."""
+
+    action_ids: list[str]
     decision: str
     errors: list[PyModel[Error]]
 
