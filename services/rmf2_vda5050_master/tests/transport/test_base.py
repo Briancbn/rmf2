@@ -25,7 +25,7 @@ class _FakeTransport(ServerTransportBase):
     ):
         return _FakePublisher(topic, message_type)
 
-    def _subscribe(self, message_type, topic, callback):
+    def create_subscriber(self, message_type, topic, callback):
         return SubscriberBase(topic, message_type)
 
     def spin_once(self, timeout=0.0):

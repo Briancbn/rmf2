@@ -110,8 +110,7 @@ class ServerTransportZenoh(ServerTransportBase):
         transport = ServerTransportZenoh.from_endpoints(["tcp/localhost:7447"])
 
     Zenoh reconnects to endpoints automatically; :meth:`spin_once` and
-    :meth:`spin_some` are no-ops. Use :class:`~.manager.TransportManager` to
-    fan out across multiple transports.
+    :meth:`spin_some` are no-ops.
     """
 
     def __init__(
@@ -147,7 +146,7 @@ class ServerTransportZenoh(ServerTransportBase):
             delivery_mode=delivery_mode,
         )
 
-    def _subscribe(
+    def create_subscriber(
         self,
         message_type: type[T],
         topic: str,

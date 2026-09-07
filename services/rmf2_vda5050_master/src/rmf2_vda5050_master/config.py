@@ -25,45 +25,39 @@ _TOML_FILES = ["config.toml", f"config.{_MODE}.toml"]
 
 
 class AmqpSettings(BaseModel):
-    """AMQP transport settings. Set ``enabled = true`` to activate.
+    """AMQP transport connection settings.
 
     TOML::
 
         [amqp]
-        enabled = true
         url = "amqp://guest:guest@localhost/"
         exchange = "rmf2"
 
     Env vars (prefix ``RMF2_VM__AMQP__``)::
 
-        RMF2_VM__AMQP__ENABLED=true
         RMF2_VM__AMQP__URL=amqp://guest:guest@localhost/
         RMF2_VM__AMQP__EXCHANGE=rmf2
     """
 
-    enabled: bool = True
     url: str = "amqp://guest:guest@localhost/"
     exchange: str = "rmf2"
 
 
 class ZenohSettings(BaseModel):
-    """Zenoh transport settings. Set ``enabled = true`` to activate.
+    """Zenoh transport connection settings.
 
     TOML::
 
         [zenoh]
-        enabled = true
         endpoints = ["tcp/localhost:7447"]
 
     Env vars (prefix ``RMF2_VM__ZENOH__``)::
 
-        RMF2_VM__ZENOH__ENABLED=true
         RMF2_VM__ZENOH__ENDPOINTS=["tcp/localhost:7447"]
 
     Leave ``endpoints`` empty to use the default Zenoh peer-to-peer discovery.
     """
 
-    enabled: bool = False
     endpoints: list[str] = Field(default_factory=list)
 
 
@@ -103,11 +97,15 @@ class Settings(BaseSettings):
     host: str = Field(description="Host address for the FastAPI server to bind to")
     port: int = Field(description="Port for the FastAPI server to listen on")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    transport: Literal["amqp", "zenoh"] | None = Field(
+        default=None,
+        description="Transport backend to use. One of: amqp, zenoh. Omit or set to null to run without a transport (HTTP-only mode).",
+    )
     amqp: AmqpSettings = Field(
-        default_factory=AmqpSettings, description="AMQP transport settings"
+        default_factory=AmqpSettings, description="AMQP transport connection settings"
     )
     zenoh: ZenohSettings = Field(
-        default_factory=ZenohSettings, description="Zenoh transport settings"
+        default_factory=ZenohSettings, description="Zenoh transport connection settings"
     )
     heartbeat_interval: float = Field(
         default=5.0,

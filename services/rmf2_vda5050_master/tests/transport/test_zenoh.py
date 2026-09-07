@@ -140,7 +140,7 @@ def test_publisher_put_error_does_not_raise(transport, mock_session):
 
 
 def test_subscribe_declares_on_session(transport, mock_session):
-    transport._subscribe(str, "my/topic", lambda msg: None)
+    transport.create_subscriber(str, "my/topic", lambda msg: None)
     mock_session.declare_subscriber.assert_called_once()
     args, _ = mock_session.declare_subscriber.call_args
     assert args[0] == "my/topic"
@@ -157,7 +157,7 @@ def test_subscriber_callback_invoked(transport, mock_session):
 
     mock_session.declare_subscriber.side_effect = capture_handler
 
-    transport._subscribe(str, "t", lambda topic, body: received.append((topic, body)))
+    transport.create_subscriber(str, "t", lambda topic, body: received.append((topic, body)))
 
     sample = MagicMock()
     sample.key_expr = "t"
@@ -171,7 +171,7 @@ def test_subscriber_unsubscribe_calls_undeclare(transport, mock_session):
     mock_sub = MagicMock()
     mock_session.declare_subscriber.return_value = mock_sub
 
-    sub = transport._subscribe(str, "t", lambda msg: None)
+    sub = transport.create_subscriber(str, "t", lambda msg: None)
     sub.unsubscribe()
 
     mock_sub.undeclare.assert_called_once()
@@ -182,7 +182,7 @@ def test_subscriber_unsubscribe_idempotent(transport, mock_session):
     mock_sub.undeclare.side_effect = RuntimeError("already closed")
     mock_session.declare_subscriber.return_value = mock_sub
 
-    sub = transport._subscribe(str, "t", lambda msg: None)
+    sub = transport.create_subscriber(str, "t", lambda msg: None)
     sub.unsubscribe()  # must not raise
 
 

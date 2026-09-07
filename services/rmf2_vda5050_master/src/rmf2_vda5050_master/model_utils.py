@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, TypeVar
@@ -12,12 +13,45 @@ from pydantic import BaseModel, GetPydanticSchema, model_validator
 from pydantic_core import core_schema
 from typing_extensions import Self
 
+_LOG = logging.getLogger(__name__)
+
 T = TypeVar("T")
 
 _JsonSchema = dict[str, Any]
 
 
 _BASIC_TYPES = (str, int, float, bool, list, dict, type(None))
+
+
+def _inline_refs(schema: _JsonSchema) -> _JsonSchema:
+    """Inline local ``$ref`` entries so the schema is self-contained.
+
+    Pydantic 2's ``GetPydanticSchema`` does not hoist nested ``$defs`` — any ``$ref``
+    it didn't register itself causes a ``KeyError`` during JSON schema generation.
+    """
+    defs = {**schema.get("definitions", {}), **schema.get("$defs", {})}
+    if not defs or '"$ref"' not in json.dumps(schema):
+        return schema
+
+    _LOG.warning(
+        "Schema '%s' contains local $ref entries; inlining definitions for OpenAPI compatibility.",
+        schema.get("title", "<unknown>"),
+    )
+
+    def _resolve(node: Any) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node and len(node) == 1:
+                for prefix in ("#/definitions/", "#/$defs/"):
+                    if node["$ref"].startswith(prefix):
+                        key = node["$ref"][len(prefix):]
+                        if key in defs:
+                            return _resolve(defs[key])
+            return {k: _resolve(v) for k, v in node.items() if k not in ("definitions", "$defs")}
+        if isinstance(node, list):
+            return [_resolve(item) for item in node]
+        return node
+
+    return _resolve(schema)
 
 
 def _coerce_pybind_value(v: Any) -> Any:
@@ -44,6 +78,7 @@ class FromVda5050(BaseModel):
             return {
                 field: _coerce_pybind_value(getattr(data, field))
                 for field in cls.model_fields
+                if hasattr(data, field)
             }
         return data
 
@@ -53,6 +88,8 @@ class FromVda5050(BaseModel):
 
 
 def _make_vda_schema(vda_type: type, json_schema: _JsonSchema | None = None):
+    _schema = json_schema
+
     def validate(value: Any) -> Any:
         if isinstance(value, dict):
             return vda_type.from_json(value)
@@ -71,11 +108,7 @@ def _make_vda_schema(vda_type: type, json_schema: _JsonSchema | None = None):
         )
 
     def get_json_schema(cs, handler) -> _JsonSchema:
-        return (
-            json_schema
-            if json_schema is not None
-            else {"type": "object", "title": vda_type.__name__}
-        )
+        return _schema if _schema is not None else {"type": "object", "title": vda_type.__name__}
 
     return get_core_schema, get_json_schema
 
@@ -112,7 +145,7 @@ class PyModel(Generic[T]):
         if property_path is not None:
             for key in property_path.split("."):
                 schema = schema[key]
-        cls._registry[vda_type] = schema
+        cls._registry[vda_type] = _inline_refs(schema)
 
     def __class_getitem__(cls, vda_type: type) -> type:
         get_core_schema, get_json_schema = _make_vda_schema(

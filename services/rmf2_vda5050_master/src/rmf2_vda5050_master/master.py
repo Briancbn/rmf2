@@ -5,7 +5,6 @@ import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from uuid import uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 from vda5050_core.master import OnboardSpec, VDA5050Master
@@ -21,16 +20,16 @@ from vda5050_core.types import (
 )
 
 from . import crud
+from .action_factory import make_factsheet_request, make_init_position, make_state_request
 from .config import Settings
 from .logger import get_logger
 from .models import (
-    InstantActionAssignmentResult,
     InstantActionsResult,
     OrderAssignmentResult,
-    OrderAssignmentResultModel,
     OrderBatch,
 )
-from .transport import DeliveryMode, Heartbeat, PublisherBase, TransportManager
+from .models import AgvConfig, AgvInitConfig
+from .transport import DeliveryMode, Heartbeat, PublisherBase, ServerTransportBase
 
 LOGGER = get_logger(__name__)
 
@@ -60,46 +59,36 @@ def save_agv(db: Session, manufacturer: str, serial_number: str) -> None:
         crud.agv_record.update(db, manufacturer, serial_number, **_FRESH_AGV_STATE)
 
 
-def _make_state_request(manufacturer: str, serial_number: str) -> InstantActions:
-    return InstantActions.from_json(
-        {
-            "headerId": 0,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "version": "2.0.0",
-            "manufacturer": manufacturer,
-            "serialNumber": serial_number,
-            "actions": [
-                {
-                    "actionType": "stateRequest",
-                    "actionId": str(uuid4()),
-                    "blockingType": "NONE",
-                }
-            ],
-        }
-    )
-
 
 class _MasterObserver:
     def __init__(
         self,
         master: VDA5050Master,
         session_factory: sessionmaker[Session],
-        transport: TransportManager | None = None,
+        transport: ServerTransportBase | None = None,
+        topic_prefix: str | None = None,
         heartbeat: Heartbeat | None = None,
+        agv_configs: list[AgvConfig] | None = None,
     ) -> None:
         self._master = master
         self._session_factory = session_factory
         self._transport = transport
+        self._topic_prefix = topic_prefix
         self._pubs: dict[str, PublisherBase] = {}
         self._heartbeat = heartbeat
         self._heartbeat_registered: set[str] = set()
+        self._agv_configs: dict[str, AgvConfig] = {
+            f"{c.manufacturer}/{c.serial_number}": c for c in (agv_configs or [])
+        }
+        self._init_position_sent: set[str] = set()
 
-    def _fanout_publish(
-        self, message_type: type, topic: str, message, **pub_kwargs
-    ) -> None:
+    def _full_topic(self, topic: str) -> str:
+        return f"{self._topic_prefix}/{topic}" if self._topic_prefix else topic
+
+    def _publish(self, message_type: type, topic: str, message, **pub_kwargs) -> None:
         if self._transport is not None and topic not in self._pubs:
-            self._pubs[topic] = self._transport.create_fanout_publisher(
-                message_type, topic, **pub_kwargs
+            self._pubs[topic] = self._transport.create_publisher(
+                message_type, self._full_topic(topic), **pub_kwargs
             )
         pub = self._pubs.get(topic)
         if pub:
@@ -115,7 +104,7 @@ class _MasterObserver:
         return True
 
     def on_connect(self, agv_id: str) -> None:
-        LOGGER.debug("MQTT connect: %s", agv_id)
+        LOGGER.info("MQTT connect: %s", agv_id)
 
     def on_offline(self, agv_id: str) -> None:
         LOGGER.debug("MQTT offline: %s", agv_id)
@@ -138,9 +127,9 @@ class _MasterObserver:
             and self._transport is not None
             and key not in self._heartbeat_registered
         ):
-            pub = self._transport.create_fanout_publisher(
+            pub = self._transport.create_publisher(
                 Connection,
-                f"{mfr}/{sn}/connection",
+                self._full_topic(f"{mfr}/{sn}/connection"),
                 delivery_mode=DeliveryMode.PERSISTENT,
             )
 
@@ -167,17 +156,35 @@ class _MasterObserver:
             ),
         )
         if not updated:
-            LOGGER.debug("Ignoring connection for unregistered AGV: %s", agv_id)
+            LOGGER.info("Ignoring connection for unregistered AGV: %s", agv_id)
             return
         LOGGER.info("Connection updated: %s — %s", agv_id, connection.connection_state)
 
         if is_online:
-            self._master.publish_instant_actions(mfr, sn, _make_state_request(mfr, sn))
+            self._master.publish_instant_actions(mfr, sn, make_state_request(mfr, sn))
+            self._master.publish_instant_actions(mfr, sn, make_factsheet_request(mfr, sn))
 
     def on_state(self, agv_id: str, state) -> None:
         mfr = state.header.manufacturer
         sn = state.header.serial_number
-        self._fanout_publish(State, f"{mfr}/{sn}/state", state)
+
+        if agv_id not in self._init_position_sent:
+            state_pos = state.agv_position
+            if state_pos is None:
+                LOGGER.info("Waiting for agvPosition to be available %s...", agv_id)
+
+            elif not state_pos.position_initialized:
+                cfg = self._agv_configs.get(agv_id)
+                LOGGER.info("Sending initPosition to %s", agv_id)
+                instant_action = make_init_position(mfr, sn, cfg.init_config if cfg else None, state)
+                print(state.json())
+                print(instant_action.json())
+                self._master.publish_instant_actions(
+                    mfr, sn, instant_action
+                )
+                self._init_position_sent.add(agv_id)
+
+        self._publish(State, f"{mfr}/{sn}/state", state)
         updated = self._update_if_registered(
             mfr,
             sn,
@@ -216,14 +223,17 @@ class _MasterObserver:
                 crud.order_record.update(
                     session,
                     db_obj=r,
-                    obj_in={"rejected_at": datetime.now(timezone.utc)},
+                    obj_in={
+                        "rejected_at": datetime.now(timezone.utc),
+                        "rejection_errors_json": json.dumps([e.json() for e in errors]),
+                    },
                 )
         LOGGER.warning("Order rejected: %s — %s", agv_id, order_id)
 
     def on_factsheet(self, agv_id: str, factsheet) -> None:
         mfr = factsheet.header.manufacturer
         sn = factsheet.header.serial_number
-        self._fanout_publish(Factsheet, f"{mfr}/{sn}/factsheet", factsheet)
+        self._publish(Factsheet, f"{mfr}/{sn}/factsheet", factsheet)
         updated = self._update_if_registered(
             mfr,
             sn,
@@ -240,47 +250,57 @@ class _MasterObserver:
     def on_visualization(self, agv_id: str, visualization) -> None:
         mfr = visualization.header.manufacturer
         sn = visualization.header.serial_number
-        self._fanout_publish(Visualization, f"{mfr}/{sn}/visualization", visualization)
+        self._publish(Visualization, f"{mfr}/{sn}/visualization", visualization)
         LOGGER.debug("Visualization updated: %s", agv_id)
 
 
 class _TransportObserver:
     """Wires inbound transport messages to master commands."""
 
-    def __init__(self, master: VDA5050Master, transport: TransportManager) -> None:
+    def __init__(
+        self,
+        master: VDA5050Master,
+        transport: ServerTransportBase,
+        topic_prefix: str | None = None,
+    ) -> None:
         self._master = master
-        self._order_result_pub = transport.create_fanout_publisher(
-            OrderAssignmentResult, "assign_order_result"
+
+        def _full(topic: str) -> str:
+            return f"{topic_prefix}/{topic}" if topic_prefix else topic
+
+        self._order_result_pub = transport.create_publisher(
+            OrderAssignmentResult, _full("assign_order_result")
         )
-        self._instant_action_result_pub = transport.create_fanout_publisher(
-            InstantActionsResult, "assign_instant_actions_result"
+        self._instant_action_result_pub = transport.create_publisher(
+            InstantActionsResult, _full("assign_instant_actions_result")
         )
         self._subscribers = [
-            transport.create_subscriber(Order, "assign_order", self.on_assign_order),
+            transport.create_subscriber(Order, _full("assign_order"), self.on_assign_order),
             transport.create_subscriber(
-                OrderBatch, "assign_order_batch", self.on_assign_order_batch
+                OrderBatch, _full("assign_order_batch"), self.on_assign_order_batch
             ),
             transport.create_subscriber(
-                InstantActions, "assign_instant_actions", self.on_assign_instant_actions
+                InstantActions,
+                _full("assign_instant_actions"),
+                self.on_assign_instant_actions,
             ),
         ]
 
     def _publish_order_result(
-        self, order: Order, result_model: OrderAssignmentResultModel
+        self, order: Order, result_model: OrderAssignmentResult
     ) -> None:
         self._order_result_pub.publish(
             OrderAssignmentResult(
-                order_id=order.order_id,
-                order_update_id=order.order_update_id,
                 decision=result_model.decision,
                 errors=result_model.errors,
+                order=order,
             )
         )
 
     def on_assign_order(self, order: Order) -> None:
         mfr, sn = order.header.manufacturer, order.header.serial_number
         result = self._master.assign_order(mfr, sn, order)
-        result_model = OrderAssignmentResultModel.from_vda5050(result)
+        result_model = OrderAssignmentResult.from_vda5050(result)
         LOGGER.info("assign_order %s/%s: %s", mfr, sn, result_model.decision)
         self._publish_order_result(order, result_model)
 
@@ -288,20 +308,20 @@ class _TransportObserver:
         for order in batch.orders:
             mfr, sn = order.header.manufacturer, order.header.serial_number
             result = self._master.assign_order(mfr, sn, order)
-            result_model = OrderAssignmentResultModel.from_vda5050(result)
+            result_model = OrderAssignmentResult.from_vda5050(result)
             LOGGER.info("assign_order_batch %s/%s: %s", mfr, sn, result_model.decision)
             self._publish_order_result(order, result_model)
 
     def on_assign_instant_actions(self, actions: InstantActions) -> None:
         mfr, sn = actions.header.manufacturer, actions.header.serial_number
         result = self._master.assign_instant_actions(mfr, sn, actions)
-        result_model = InstantActionAssignmentResult.from_vda5050(result)
+        result_model = InstantActionsResult.from_vda5050(result)
         LOGGER.info("assign_instant_actions %s/%s: %s", mfr, sn, result_model.decision)
         self._instant_action_result_pub.publish(
             InstantActionsResult(
-                action_ids=[a.action_id for a in actions.actions],
                 decision=result_model.decision,
                 errors=result_model.errors,
+                instant_actions=actions,
             )
         )
 
@@ -310,7 +330,8 @@ class _TransportObserver:
 def make_master(
     config: Settings,
     session_factory: sessionmaker[Session],
-    transport: TransportManager,
+    transport: ServerTransportBase | None,
+    topic_prefix: str | None = None,
     heartbeat: Heartbeat | None = None,
 ) -> Generator[VDA5050Master, None, None]:
     # --- Build master and register observer callbacks ---
@@ -319,8 +340,19 @@ def make_master(
     LOGGER.info("Starting master %s", master_id)
     mqtt_client = create_mqtt_client(config.mqtt_broker, master_id)
     master = VDA5050Master.make(mqtt_client)
-    observer = _MasterObserver(master, session_factory, transport, heartbeat=heartbeat)
-    _transport_observer = _TransportObserver(master, transport)
+    observer = _MasterObserver(
+        master,
+        session_factory,
+        transport,
+        topic_prefix=topic_prefix,
+        heartbeat=heartbeat,
+        agv_configs=config.agvs,
+    )
+    _transport_observer = (
+        _TransportObserver(master, transport, topic_prefix=topic_prefix)
+        if transport is not None
+        else None
+    )
 
     master.on_connect(observer.on_connect)
     master.on_offline(observer.on_offline)
@@ -397,6 +429,11 @@ def make_master(
         len(result.failed),
         config.mqtt_broker,
     )
+    for onboarded in result.onboarded:
+        mfr, sn = onboarded.manufacturer, onboarded.serial_number
+        master.publish_instant_actions(mfr, sn, make_state_request(mfr, sn))
+        master.publish_instant_actions(mfr, sn, make_factsheet_request(mfr, sn))
+        LOGGER.debug("Sent stateRequest + factsheetRequest after onboarding %s/%s", mfr, sn)
     if result.failed:
         with session_factory() as session:
             for failed in result.failed:

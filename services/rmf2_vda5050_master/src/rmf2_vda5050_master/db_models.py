@@ -45,6 +45,9 @@ class OrderRecord(Base):
     rejected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    rejection_errors_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True, default=None
+    )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )

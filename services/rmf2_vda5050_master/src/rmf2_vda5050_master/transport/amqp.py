@@ -108,7 +108,7 @@ class ServerTransportAmqp(ServerTransportBase):
     """AMQP transport using a topic exchange and :class:`SelectConnection`.
 
     Topics use MQTT-style ``/`` separators; converted to ``.`` for AMQP routing keys.
-    Each :meth:`_subscribe` call gets its own exclusive queue.
+    Each :meth:`create_subscriber` call gets its own exclusive queue.
 
     Pass a :class:`~pika.ConnectionParameters` (or :class:`~pika.URLParameters`);
     the transport manages its own connection and reconnects automatically::
@@ -126,7 +126,6 @@ class ServerTransportAmqp(ServerTransportBase):
     :meth:`_send` and :meth:`_cancel_consumer` are thread-safe via
     ``ioloop.add_callback_threadsafe``.
 
-    Use :class:`~.manager.TransportManager` to fan out across multiple transports.
     """
 
     def __init__(
@@ -186,7 +185,7 @@ class ServerTransportAmqp(ServerTransportBase):
             self, topic, message_type, self.serializer, delivery_mode=delivery_mode
         )
 
-    def _subscribe(
+    def create_subscriber(
         self,
         message_type: type[T],
         topic: str,

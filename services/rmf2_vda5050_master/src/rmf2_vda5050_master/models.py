@@ -16,11 +16,12 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 from vda5050_core.master import (
     OnboardSpec as _VdaOnboardSpec,
 )
 from vda5050_core.types import (
+    AGVPosition,
+    ActionParameter,
     Connection,
     ConnectionState,
     Error,
@@ -36,7 +37,9 @@ from .model_utils import FromVda5050, PyModel
 _SCHEMAS = Path(__file__).parent / "schemas"
 
 PyModel.register(State, _SCHEMAS / "state.schema.json")
+PyModel.register(AGVPosition, _SCHEMAS / "state.schema.json", property_path="properties.agvPosition")
 PyModel.register(InstantActions, _SCHEMAS / "instantActions.schema.json")
+PyModel.register(ActionParameter, _SCHEMAS / "instantActions.schema.json", property_path="properties.actions.items.properties.actionParameters.items")
 PyModel.register(Connection, _SCHEMAS / "connection.schema.json")
 PyModel.register(
     Error, _SCHEMAS / "state.schema.json", property_path="properties.errors.items"
@@ -48,9 +51,18 @@ PyModel.register(Visualization, _SCHEMAS / "visualization.schema.json")
 _connection_adapter = TypeAdapter(PyModel[Connection])
 
 
+class AgvInitConfig(BaseModel):
+    x: float | None = None
+    y: float | None = None
+    theta: float | None = None
+    last_node_id: str | None = None
+    map_id: str | None = None
+
+
 class AgvConfig(BaseModel):
     manufacturer: str
     serial_number: str
+    init_config: AgvInitConfig | None = None
 
 
 class AgvStatus(AgvConfig):
@@ -96,7 +108,7 @@ class BatchOnboardResult(FromVda5050):
 
 
 class OrderStatus(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     manufacturer: str
     serial_number: str
@@ -105,12 +117,15 @@ class OrderStatus(BaseModel):
     assigned_at: datetime
     completed_at: datetime | None = None
     rejected_at: datetime | None = None
+    rejection_errors: list[PyModel[Error]] | None = Field(
+        None, validation_alias="rejection_errors_json"
+    )
     order: PyModel[Order] | None = Field(None, validation_alias="order_json")
 
-    @field_validator("order", mode="before")
+    @field_validator("rejection_errors", "order", mode="before")
     @classmethod
-    def _parse_order_json(cls, value: str | None, info: ValidationInfo) -> dict | None:
-        if not (info.context or {}).get("show_order", False):
+    def _parse_json_fields(cls, value: str | None, info: ValidationInfo):
+        if not (info.context or {}).get(f"show_{info.field_name}", False):
             return None
         return json.loads(value) if value is not None else None
 
@@ -119,31 +134,31 @@ class OrderBatch(BaseModel):
     orders: list[PyModel[Order]]
 
 
-class OrderAssignmentResultModel(FromVda5050):
+class OrderAssignmentResult(FromVda5050):
     decision: str
     errors: list[PyModel[Error]]
+    order: PyModel[Order] | None = None
 
 
-class OrderAssignmentResult(BaseModel):
-    """Published on the ``assign_order_error`` transport topic when assignment is rejected."""
-
-    order_id: str
-    order_update_id: int
+class InstantActionsResult(FromVda5050):
     decision: str
     errors: list[PyModel[Error]]
+    instant_actions: PyModel[InstantActions] | None = None
 
 
-class InstantActionAssignmentResult(FromVda5050):
-    decision: str
-    errors: list[PyModel[Error]]
+class CustomInstantActionRequest(BaseModel):
+    action_type: str
+    blocking_type: str = "NONE"
+    params: list[PyModel[ActionParameter]] | None = None
 
 
-class InstantActionsResult(BaseModel):
-    """Published on the ``assign_instant_actions_result`` transport topic."""
+class RouteOrderRequest(BaseModel):
+    start_node_id: str
+    end_node_id: str
+    layout_id: str | None = None
+    allowed_deviation_xy: float | None = None
+    allowed_deviation_theta: float | None = None
 
-    action_ids: list[str]
-    decision: str
-    errors: list[PyModel[Error]]
 
 
 class DeviceConnection(BaseModel):
@@ -151,9 +166,11 @@ class DeviceConnection(BaseModel):
     deviceId: str
     connectionState: Literal["ONLINE", "OFFLINE"]
 
-    @model_validator(mode="before")
+    @model_validator(mode="wrap")
     @classmethod
-    def from_vda5050_connection(cls, data) -> Self:
+    def from_vda5050_connection(cls, data, handler):
+        if isinstance(data, cls):
+            return data
         conn: Connection = _connection_adapter.validate_python(data)
         return cls.model_construct(
             timestamp=datetime.fromtimestamp(

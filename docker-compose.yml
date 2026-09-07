@@ -1,35 +1,24 @@
-name: rmf2
+include:
+  - ./docker-compose.yml
 
 services:
-  mqtt-broker:
-    image: eclipse-mosquitto:2
-    volumes:
-      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+  rmf2-vda5050-master:
+    build:
+      context: ./services/rmf2_vda5050_master
+      dockerfile: Dockerfile
     ports:
-      - "${MQTT_PORT:-1883}:${MQTT_PORT:-1883}"
+      - "${RMF2_VM_PORT:-8000}:8000"
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
     networks:
       - rmf2-net
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_pub -p ${MQTT_PORT:-1883} -t healthcheck -m ping || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-
-  amqp-broker:
-    image: rabbitmq:3-management
-    ports:
-      - "${AMQP_PORT:-5672}:${AMQP_PORT:-5672}"
-      - "${AMQP_MGMT_PORT:-15672}:${AMQP_MGMT_PORT:-15672}"
-    networks:
-      - rmf2-net
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-networks:
-  rmf2-net:
-    driver: bridge
-    name: rmf2-net
+    environment:
+      MODE: staging
+      RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
+      RMF2_VM__AMQP__ENABLED: true
+      RMF2_VM__AMQP__URL: "amqp://guest:guest@amqp-broker/"
+      RMF2_VM__AMQP__EXCHANGE: rmf2
+      RMF2_VM__MASTER_MQTT_CLIENT_ID: "example-master"
+      RMF2_VM__HOST: "0.0.0.0"
+      RMF2_VM__PORT: "8000"

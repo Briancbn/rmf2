@@ -176,18 +176,18 @@ def test_amqp_subscriber_unsubscribe_idempotent(transport):
 
 
 # ---------------------------------------------------------------------------
-# _subscribe — registers and auto-binds when channel is open
+# create_subscriber — registers and auto-binds when channel is open
 # ---------------------------------------------------------------------------
 
 
 def test_subscribe_appends_to_subscriptions(transport):
     assert len(transport._subscriptions) == 0
-    transport._subscribe(str, "x", lambda msg: None)
+    transport.create_subscriber(str, "x", lambda msg: None)
     assert len(transport._subscriptions) == 1
 
 
 def test_subscribe_schedules_bind_when_channel_ready(transport, mock_connection):
-    transport._subscribe(str, "x", lambda msg: None)
+    transport.create_subscriber(str, "x", lambda msg: None)
     mock_connection.ioloop.add_callback_threadsafe.assert_called_once()
 
 
@@ -196,7 +196,7 @@ def test_subscribe_does_not_schedule_bind_without_channel(mock_connection):
     t._connection = mock_connection
     t._channel = None  # no channel yet
 
-    t._subscribe(str, "x", lambda msg: None)
+    t.create_subscriber(str, "x", lambda msg: None)
 
     mock_connection.ioloop.add_callback_threadsafe.assert_not_called()
 
@@ -228,7 +228,7 @@ def test_on_channel_open_declares_exchange(transport, mock_connection):
 def test_on_exchange_declared_binds_all_subscribers(transport, mock_channel):
     # Subscribe before channel is available so no auto-bind fires.
     transport._channel = None
-    transport._subscribe(str, "foo/bar", lambda msg: None)
+    transport.create_subscriber(str, "foo/bar", lambda msg: None)
     transport._channel = mock_channel
 
     transport._on_exchange_declared(MagicMock())
@@ -345,7 +345,7 @@ def test_send_content_type_is_json(transport, mock_channel):
 
 
 # ---------------------------------------------------------------------------
-# Thread safety — _subscribe
+# Thread safety — create_subscriber
 # ---------------------------------------------------------------------------
 
 
@@ -358,7 +358,7 @@ def test_subscribe_thread_safety():
     def worker(i: int):
         barrier.wait()
         try:
-            t._subscribe(str, f"topic/{i}", lambda msg: None)
+            t.create_subscriber(str, f"topic/{i}", lambda msg: None)
         except Exception as e:  # noqa: BLE001
             errors.append(e)
 

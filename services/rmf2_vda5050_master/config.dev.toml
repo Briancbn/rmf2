@@ -2,6 +2,9 @@
 manufacturer = "Manufacturer"
 serial_number = "1"
 
+[agvs.init_config]
+map_id = "warehouse_floor1"
+
 [[agvs]]
 manufacturer = "Manufacturer"
 serial_number = "2"

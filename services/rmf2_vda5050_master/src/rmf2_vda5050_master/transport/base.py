@@ -83,8 +83,7 @@ class ServerTransportBase(ABC):
             by this transport. Defaults to :class:`JsonSerializer`.
 
     Each subclass owns its connection lifecycle and fully implements
-    :meth:`create_publisher` and :meth:`_subscribe`. Topic prefixing is handled
-    by :class:`~.manager.TransportManager` before topics reach the transport.
+    :meth:`create_publisher` and :meth:`create_subscriber`.
     """
 
     def __init__(self, serializer: SerializerBase | None = None) -> None:
@@ -106,7 +105,7 @@ class ServerTransportBase(ABC):
         """
 
     @abstractmethod
-    def _subscribe(
+    def create_subscriber(
         self,
         message_type: type[T],
         topic: str,

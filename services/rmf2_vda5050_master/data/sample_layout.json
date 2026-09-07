@@ -43,6 +43,18 @@
               "maxSpeed": 1.0
             }
           ]
+        },
+        {
+          "edgeId": "E2",
+          "startNodeId": "N1",
+          "endNodeId": "N0",
+          "vehicleTypeEdgeProperties": [
+            {
+              "vehicleTypeId": "agv-default",
+              "rotationAllowed": true,
+              "maxSpeed": 1.0
+            }
+          ]
         }
       ],
       "stations": [
