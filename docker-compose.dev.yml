@@ -1,9 +1,11 @@
+include:
+  - ./docker-compose.yml
+
 services:
   rmf2-vda5050-master:
     build:
       context: ./services/rmf2_vda5050_master
       dockerfile: Dockerfile
-    command: uv run uvicorn rmf2_vda5050_master.app:app --host 0.0.0.0 --port 8000 --reload
     develop:
       watch:
         - action: sync
@@ -25,6 +27,9 @@ services:
     environment:
       MODE: dev
       RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
+      RMF2_VM__AMQP__ENABLED: true
+      RMF2_VM__AMQP__URL: "amqp://guest:guest@amqp-broker/"
+      RMF2_VM__AMQP__EXCHANGE: rmf2
       RMF2_VM__MASTER_MQTT_CLIENT_ID: "example-master"
       RMF2_VM__HOST: "0.0.0.0"
       RMF2_VM__PORT: "8000"
