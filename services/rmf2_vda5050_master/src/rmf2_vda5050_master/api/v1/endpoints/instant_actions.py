@@ -12,8 +12,8 @@ from rmf2_vda5050_master.action_factory import (
 from rmf2_vda5050_master.model_utils import PyModel
 from rmf2_vda5050_master.models import AgvInitConfig, CustomInstantActionRequest, InstantActionsResult
 
-from ..deps.logger import LoggerDeps
-from ..deps.master import MasterDeps
+from rmf2_vda5050_master.api.deps.logger import LoggerDeps
+from rmf2_vda5050_master.api.deps.master import MasterDeps
 
 router = APIRouter()
 

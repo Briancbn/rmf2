@@ -17,9 +17,9 @@ from rmf2_vda5050_master.models import (
 )
 from rmf2_vda5050_master.order_factory import build_graph, build_order
 
-from ..deps.db import DbSession
-from ..deps.logger import LoggerDeps
-from ..deps.master import MasterDeps
+from rmf2_vda5050_master.api.deps.db import DbSession
+from rmf2_vda5050_master.api.deps.logger import LoggerDeps
+from rmf2_vda5050_master.api.deps.master import MasterDeps
 
 router = APIRouter()
 

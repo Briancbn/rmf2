@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     )
     host: str = Field(description="Host address for the FastAPI server to bind to")
     port: int = Field(description="Port for the FastAPI server to listen on")
+    root_path: str = Field(default="", description="ASGI root_path when running behind a reverse proxy with a path prefix (e.g. /rmf2_vda5050_master)")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
     transport: Literal["amqp", "zenoh"] | None = Field(
         default=None,

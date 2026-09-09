@@ -80,7 +80,6 @@ class _MasterObserver:
         self._agv_configs: dict[str, AgvConfig] = {
             f"{c.manufacturer}/{c.serial_number}": c for c in (agv_configs or [])
         }
-        self._init_position_sent: set[str] = set()
 
     def _full_topic(self, topic: str) -> str:
         return f"{self._topic_prefix}/{topic}" if self._topic_prefix else topic
@@ -168,21 +167,14 @@ class _MasterObserver:
         mfr = state.header.manufacturer
         sn = state.header.serial_number
 
-        if agv_id not in self._init_position_sent:
-            state_pos = state.agv_position
-            if state_pos is None:
-                LOGGER.info("Waiting for agvPosition to be available %s...", agv_id)
-
-            elif not state_pos.position_initialized:
-                cfg = self._agv_configs.get(agv_id)
-                LOGGER.info("Sending initPosition to %s", agv_id)
-                instant_action = make_init_position(mfr, sn, cfg.init_config if cfg else None, state)
-                print(state.json())
-                print(instant_action.json())
-                self._master.publish_instant_actions(
-                    mfr, sn, instant_action
-                )
-                self._init_position_sent.add(agv_id)
+        state_pos = state.agv_position
+        if state_pos is None:
+            LOGGER.info("Waiting for agvPosition to be available %s...", agv_id)
+        elif not state_pos.position_initialized:
+            cfg = self._agv_configs.get(agv_id)
+            LOGGER.info("Sending initPosition to %s", agv_id)
+            instant_action = make_init_position(mfr, sn, cfg.init_config if cfg else None, state)
+            self._master.publish_instant_actions(mfr, sn, instant_action)
 
         self._publish(State, f"{mfr}/{sn}/state", state)
         updated = self._update_if_registered(

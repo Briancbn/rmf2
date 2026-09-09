@@ -17,5 +17,7 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 
+EXPOSE 8000
+
 CMD ["uv", "run", "rmf2_vda5050_master", \
      "--host", "0.0.0.0", "--port", "8000"]

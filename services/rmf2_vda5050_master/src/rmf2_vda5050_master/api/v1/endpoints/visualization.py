@@ -6,8 +6,8 @@ from vda5050_core.types import Visualization
 from rmf2_vda5050_master import crud
 from rmf2_vda5050_master.model_utils import PyModel
 
-from ..deps.db import DbSession
-from ..deps.master import MasterDeps
+from rmf2_vda5050_master.api.deps.db import DbSession
+from rmf2_vda5050_master.api.deps.master import MasterDeps
 
 router = APIRouter()
 

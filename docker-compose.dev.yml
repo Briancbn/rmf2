@@ -1,5 +1,5 @@
 include:
-  - ./docker-compose.yml
+  - ./infra/docker-compose.yml
 
 services:
   rmf2-vda5050-master:
@@ -17,8 +17,6 @@ services:
           path: ./services/rmf2_vda5050_master/pyproject.toml
         - action: rebuild
           path: ./services/rmf2_vda5050_master/uv.lock
-    ports:
-      - "${RMF2_VM_PORT:-8000}:8000"
     depends_on:
       mqtt-broker:
         condition: service_healthy
@@ -33,3 +31,41 @@ services:
       RMF2_VM__MASTER_MQTT_CLIENT_ID: "example-master"
       RMF2_VM__HOST: "0.0.0.0"
       RMF2_VM__PORT: "8000"
+      RMF2_VM__ROOT_PATH: "/vda5050_master"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rmf2-vm.rule=PathPrefix(`/vda5050_master`)"
+      - "traefik.http.routers.rmf2-vm.entrypoints=web"
+      - "traefik.http.middlewares.rmf2-vm-strip.stripprefix.prefixes=/vda5050_master"
+      - "traefik.http.routers.rmf2-vm.middlewares=rmf2-vm-strip"
+      - "traefik.http.services.rmf2-vm.loadbalancer.server.port=8000"
+
+  rmf2-res:
+    build:
+      context: ./services/rmf2_res
+      dockerfile: Dockerfile
+    develop:
+      watch:
+        - action: sync
+          path: ./services/rmf2_res/src
+          target: /app/src
+          ignore:
+            - __pycache__/
+        - action: rebuild
+          path: ./services/rmf2_res/pyproject.toml
+        - action: rebuild
+          path: ./services/rmf2_res/uv.lock
+    networks:
+      - rmf2-net
+    environment:
+      MODE: dev
+      RMF2_RES__HOST: "0.0.0.0"
+      RMF2_RES__PORT: "8000"
+      RMF2_RES__ROOT_PATH: "/res"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rmf2-res.rule=PathPrefix(`/res`)"
+      - "traefik.http.routers.rmf2-res.entrypoints=web"
+      - "traefik.http.middlewares.rmf2-res-strip.stripprefix.prefixes=/res"
+      - "traefik.http.routers.rmf2-res.middlewares=rmf2-res-strip"
+      - "traefik.http.services.rmf2-res.loadbalancer.server.port=8000"

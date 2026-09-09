@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException
 from rmf2_vda5050_master import crud
 from rmf2_vda5050_master.models import DeviceConnection
 
-from ..deps.db import DbSession
-from ..deps.logger import LoggerDeps
+from rmf2_vda5050_master.api.deps.db import DbSession
+from rmf2_vda5050_master.api.deps.logger import LoggerDeps
 
 router = APIRouter()
 

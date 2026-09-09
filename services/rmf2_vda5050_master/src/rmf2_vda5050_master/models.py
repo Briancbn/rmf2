@@ -161,6 +161,16 @@ class RouteOrderRequest(BaseModel):
 
 
 
+class HealthResponse(BaseModel):
+    status: str
+
+
+class InfoResponse(BaseModel):
+    service_version: str
+    api_version: str
+    vda5050_versions: list[str]
+
+
 class DeviceConnection(BaseModel):
     timestamp: str
     deviceId: str

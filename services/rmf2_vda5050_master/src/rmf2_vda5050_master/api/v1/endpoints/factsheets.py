@@ -8,8 +8,8 @@ from vda5050_core.types import Factsheet
 from rmf2_vda5050_master import crud
 from rmf2_vda5050_master.model_utils import PyModel
 
-from ..deps.db import DbSession
-from ..deps.logger import LoggerDeps
+from rmf2_vda5050_master.api.deps.db import DbSession
+from rmf2_vda5050_master.api.deps.logger import LoggerDeps
 
 router = APIRouter()
 
