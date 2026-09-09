@@ -1,0 +1,36 @@
+[project]
+name = "rmf2-plan-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Chen Bainian", email = "chen_bainian@a-star.edu.sg" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pika>=1.4.4",
+    "pydantic-settings[toml]>=2.15.0",
+    "python-multipart>=0.0.20",
+    "res-plan-execution",
+    "res-plan-server",
+    "uvicorn>=0.52.4",
+]
+
+[project.scripts]
+rmf2_plan_server = "rmf2_plan_server.cli:main"
+
+[tool.uv.sources]
+res-plan-execution = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution" }
+res-plan-server = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_server" }
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
+]
