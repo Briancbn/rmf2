@@ -22,6 +22,9 @@ services:
         condition: service_healthy
     networks:
       - rmf2-net
+    volumes:
+      - ./demos/warehouse/warehouse.lif.json:/app/data/warehouse.lif.json:ro
+      - ./demos/warehouse/agv_config.toml:/app/config.dev.toml:ro
     environment:
       MODE: dev
       RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
@@ -32,6 +35,7 @@ services:
       RMF2_VM__HOST: "0.0.0.0"
       RMF2_VM__PORT: "8000"
       RMF2_VM__ROOT_PATH: "/vda5050_master"
+      RMF2_VM__MAP_PATH: "data/warehouse.lif.json"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rmf2-vm.rule=PathPrefix(`/vda5050_master`)"

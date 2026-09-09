@@ -14,7 +14,6 @@ def build_graph(layout: dict) -> tuple[nx.DiGraph, dict]:
         g.add_node(node_id)
     for edge in layout.get("edges", []):
         g.add_edge(edge["startNodeId"], edge["endNodeId"], edge_data=edge)
-        g.add_edge(edge["endNodeId"], edge["startNodeId"], edge_data=edge)
     return g, node_map
 
 
