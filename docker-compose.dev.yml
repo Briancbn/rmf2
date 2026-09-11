@@ -20,15 +20,17 @@ services:
     depends_on:
       mqtt-broker:
         condition: service_healthy
+      amqp-broker:
+        condition: service_healthy
     networks:
       - rmf2-net
     volumes:
       - ./demos/warehouse/warehouse.lif.json:/app/data/warehouse.lif.json:ro
-      - ./demos/warehouse/agv_config.toml:/app/config.dev.toml:ro
+      - ./demos/warehouse/agv_config.toml:/app/config.toml:ro
     environment:
       MODE: dev
       RMF2_VM__MQTT_BROKER: "tcp://mqtt-broker:${MQTT_PORT:-1883}"
-      RMF2_VM__AMQP__ENABLED: true
+      RMF2_VM__TRANSPORT: amqp
       RMF2_VM__AMQP__URL: "amqp://guest:guest@amqp-broker/"
       RMF2_VM__AMQP__EXCHANGE: rmf2
       RMF2_VM__MASTER_MQTT_CLIENT_ID: "example-master"

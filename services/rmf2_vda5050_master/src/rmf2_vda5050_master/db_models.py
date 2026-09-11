@@ -42,6 +42,9 @@ class OrderRecord(Base):
     order_update_id: Mapped[int] = mapped_column(Integer)
     order_json: Mapped[str] = mapped_column(Text)
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    assignment_result: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
     rejected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )

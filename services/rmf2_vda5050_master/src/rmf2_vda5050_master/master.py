@@ -221,6 +221,11 @@ class _MasterObserver:
                     },
                 )
         LOGGER.warning("Order rejected: %s — %s", agv_id, order_id)
+        self._publish(
+            OrderAssignmentResult,
+            "assign_order_result",
+            OrderAssignmentResult(decision="REJECTED", errors=errors),
+        )
 
     def on_factsheet(self, agv_id: str, factsheet) -> None:
         mfr = factsheet.header.manufacturer
@@ -253,9 +258,11 @@ class _TransportObserver:
         self,
         master: VDA5050Master,
         transport: ServerTransportBase,
+        session_factory: sessionmaker[Session],
         topic_prefix: str | None = None,
     ) -> None:
         self._master = master
+        self._session_factory = session_factory
 
         def _full(topic: str) -> str:
             return f"{topic_prefix}/{topic}" if topic_prefix else topic
@@ -289,11 +296,32 @@ class _TransportObserver:
             )
         )
 
+    def _save_order(self, order: Order, result_model: OrderAssignmentResult) -> None:
+        mfr, sn = order.header.manufacturer, order.header.serial_number
+        with self._session_factory() as session:
+            record = crud.order_record.create(
+                session,
+                manufacturer=mfr,
+                serial_number=sn,
+                order_id=order.order_id,
+                order_update_id=order.order_update_id,
+                order_json=json.dumps(order.json()),
+                assigned_at=datetime.now(timezone.utc),
+            )
+            update: dict = {"assignment_result": result_model.decision}
+            if result_model.errors:
+                update["rejected_at"] = datetime.now(timezone.utc)
+                update["rejection_errors_json"] = json.dumps(
+                    [e.json() for e in result_model.errors]
+                )
+            crud.order_record.update(session, db_obj=record, obj_in=update)
+
     def on_assign_order(self, order: Order) -> None:
         mfr, sn = order.header.manufacturer, order.header.serial_number
         result = self._master.assign_order(mfr, sn, order)
         result_model = OrderAssignmentResult.from_vda5050(result)
         LOGGER.info("assign_order %s/%s: %s", mfr, sn, result_model.decision)
+        self._save_order(order, result_model)
         self._publish_order_result(order, result_model)
 
     def on_assign_order_batch(self, batch: OrderBatch) -> None:
@@ -302,6 +330,7 @@ class _TransportObserver:
             result = self._master.assign_order(mfr, sn, order)
             result_model = OrderAssignmentResult.from_vda5050(result)
             LOGGER.info("assign_order_batch %s/%s: %s", mfr, sn, result_model.decision)
+            self._save_order(order, result_model)
             self._publish_order_result(order, result_model)
 
     def on_assign_instant_actions(self, actions: InstantActions) -> None:
@@ -341,7 +370,7 @@ def make_master(
         agv_configs=config.agvs,
     )
     _transport_observer = (
-        _TransportObserver(master, transport, topic_prefix=topic_prefix)
+        _TransportObserver(master, transport, session_factory, topic_prefix=topic_prefix)
         if transport is not None
         else None
     )

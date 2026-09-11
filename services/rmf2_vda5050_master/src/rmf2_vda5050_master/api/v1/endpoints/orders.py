@@ -89,11 +89,7 @@ def _do_assign(
             status_code=404,
             detail=f"AGV not onboarded: {manufacturer}/{serial_number}",
         )
-    result = master.assign_order(manufacturer, serial_number, order)
-    logger.info(
-        "Order assigned to %s/%s: %s", manufacturer, serial_number, result.decision
-    )
-    crud.order_record.create(
+    record = crud.order_record.create(
         db,
         manufacturer=manufacturer,
         serial_number=serial_number,
@@ -102,7 +98,19 @@ def _do_assign(
         order_json=json.dumps(order.json()),
         assigned_at=datetime.now(timezone.utc),
     )
-    return OrderAssignmentResult.from_vda5050(result)
+    result = master.assign_order(manufacturer, serial_number, order)
+    result_model = OrderAssignmentResult.from_vda5050(result)
+    logger.info(
+        "Order assigned to %s/%s: %s", manufacturer, serial_number, result_model.decision
+    )
+    update: dict = {"assignment_result": result_model.decision}
+    if result_model.errors:
+        update["rejected_at"] = datetime.now(timezone.utc)
+        update["rejection_errors_json"] = json.dumps(
+            [e.json() for e in result_model.errors]
+        )
+    crud.order_record.update(db, db_obj=record, obj_in=update)
+    return result_model
 
 
 @router.post("/{manufacturer}/{serial_number}/assign", response_model_exclude_none=True)
