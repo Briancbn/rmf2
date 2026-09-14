@@ -1,0 +1,7 @@
+[[robots]]
+robot_id = "Manufacturer/1"
+start_location = 'P_0_0'
+
+[[robots]]
+robot_id = "Manufacturer/2"
+start_location = 'P_2_0'
