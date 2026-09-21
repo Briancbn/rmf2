@@ -66,7 +66,13 @@ async def lifespan(app: FastAPI):
             heartbeat.stop()
 
 
-app = FastAPI(lifespan=lifespan, docs_url=_docs_url, redoc_url=_redoc_url, root_path=config.root_path)
+app = FastAPI(
+    title="RMF2 VDA5050 Master",
+    lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    root_path=config.root_path,
+)
 
 app.add_middleware(
     CORSMiddleware,
