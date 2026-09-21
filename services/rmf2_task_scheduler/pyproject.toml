@@ -1,0 +1,37 @@
+[project]
+name = "rmf2-task-scheduler"
+version = "0.1.0"
+description = "FastAPI wrapper around the native rmf2_scheduler pybind11 package"
+readme = "README.md"
+authors = [
+    { name = "Chen Bainian", email = "chen_bainian@a-star.edu.sg" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic-settings[toml]>=2.15.0",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0.52",
+    "uvicorn>=0.52.4",
+    "rmf2_scheduler",
+]
+
+[project.scripts]
+rmf2_task_scheduler = "rmf2_task_scheduler.cli:main"
+
+[tool.uv_build]
+include = ["src/rmf2_task_scheduler/schemas/*.json"]
+
+[tool.uv.sources]
+rmf2_scheduler = { git = "https://github.com/Briancbn/rmf_scheduler", branch = "feat/bn/schedule-stream-py-trampoline", subdirectory = "rmf2_scheduler" }
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
+]

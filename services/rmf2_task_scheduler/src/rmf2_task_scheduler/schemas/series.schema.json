@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "Occurrence": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "format": "date-time",
+          "title": "Time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "time"
+      ],
+      "title": "Occurrence",
+      "type": "object"
+    }
+  },
+  "description": "Mirrors the full Series wire shape produced by rmf2_scheduler.data.Series.json().",
+  "properties": {
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "cron": {
+      "title": "Cron",
+      "type": "string"
+    },
+    "timezone": {
+      "title": "Timezone",
+      "type": "string"
+    },
+    "until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Until"
+    },
+    "occurrences": {
+      "items": {
+        "$ref": "#/$defs/Occurrence"
+      },
+      "title": "Occurrences",
+      "type": "array"
+    },
+    "exception_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": [],
+      "title": "Exception Ids"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "cron",
+    "timezone",
+    "occurrences",
+    "id"
+  ],
+  "title": "Series",
+  "type": "object"
+}

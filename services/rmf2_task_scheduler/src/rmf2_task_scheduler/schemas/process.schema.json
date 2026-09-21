@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "Dependency": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "needs": {
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "title": "Needs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "needs"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "Edge": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "default": "hard",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Edge",
+      "type": "object"
+    },
+    "JsonValue": {}
+  },
+  "description": "Mirrors the full Process wire shape produced by rmf2_scheduler.data.Process.json().",
+  "properties": {
+    "graph": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "title": "Graph",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "",
+      "title": "Status"
+    },
+    "series_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "",
+      "title": "Series Id"
+    },
+    "process_details": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JsonValue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "current_events": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Current Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "graph",
+    "id"
+  ],
+  "title": "Process",
+  "type": "object"
+}
