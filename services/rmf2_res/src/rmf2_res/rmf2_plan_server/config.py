@@ -67,6 +67,7 @@ class Settings(BaseSettings):
         env_prefix="RMF2_PS__",
         env_nested_delimiter="__",
         toml_file=_TOML_FILES,
+        extra="ignore",
     )
 
     host: str = Field(default="0.0.0.0", description="Host address for the FastAPI server to bind to")
@@ -78,6 +79,10 @@ class Settings(BaseSettings):
         description="Transport backend to use. One of: amqp, zenoh. Omit or set to null to run without a transport (HTTP-only mode).",
     )
     amqp: AmqpSettings = Field(default_factory=AmqpSettings, description="AMQP transport settings")
+    plan_executor_topic_prefix: str = Field(
+        default="rmf2_plan_executor/v1",
+        description="AMQP topic prefix used to address the plan_executor (committed_locations, plan dispatch, plan_progress/error, task_status).",
+    )
     map_path: Path | None = Field(default=None, description="Path to LIF JSON map file")
     robots: list[RobotOnboardMsg] = Field(default_factory=list, description="Robots to onboard on startup")
     agvs: list[AgvConfig] = Field(

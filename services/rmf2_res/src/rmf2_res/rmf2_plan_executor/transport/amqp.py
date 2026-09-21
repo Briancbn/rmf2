@@ -20,7 +20,7 @@ from res_plan_server.transport.transport_messages import (
     RobotOnboardMsg,
 )
 
-from rmf2_plan_executor.transport.serializer import (
+from rmf2_res.rmf2_plan_executor.transport.serializer import (
     decode_committed_locations_request,
     decode_participant_discovery,
     decode_plan,
@@ -36,9 +36,17 @@ def _routing_key(topic: str) -> str:
 
 
 class AmqpExecutorTransport(ExecutorBaseTransport):
-    def __init__(self, url: str, exchange: str, *, retry_interval: float = 5.0) -> None:
+    def __init__(
+        self,
+        url: str,
+        exchange: str,
+        *,
+        topic_prefix: str = "rmf2_plan_executor/v1",
+        retry_interval: float = 5.0,
+    ) -> None:
         self._url = url
         self._exchange = exchange
+        self._topic_prefix = topic_prefix
         self._retry_interval = retry_interval
 
         self._connection: SelectConnection | None = None
@@ -50,37 +58,45 @@ class AmqpExecutorTransport(ExecutorBaseTransport):
         self._pending: list[tuple[str, Callable[[str], None]]] = []
         self._pending_lock = threading.Lock()
 
+    def _full(self, topic: str) -> str:
+        """Prefix ``topic`` the same way rmf2_plan_server's RESPlanServerTransport
+        addresses the executor, so the two sides bind to matching routing keys."""
+        return f"{self._topic_prefix}/{topic}" if self._topic_prefix else topic
+
     # ------------------------------------------------------------------ #
     # ExecutorBaseTransport — subscriptions                                #
     # ------------------------------------------------------------------ #
 
     def subscribe_robot_onboarding(self, callback: Callable[[RobotOnboardMsg], None]) -> None:
-        self._subscribe("res/robot_onboard", lambda body: callback(decode_robot_onboard(body)))
+        self._subscribe(self._full("robot_onboard"), lambda body: callback(decode_robot_onboard(body)))
 
     def subscribe_participant_discovery(self, callback: Callable[[ParticipantDiscoveryMsg], None]) -> None:
-        self._subscribe("res/participant_discovery", lambda body: callback(decode_participant_discovery(body)))
+        self._subscribe(self._full("participant_discovery"), lambda body: callback(decode_participant_discovery(body)))
 
     def subscribe_plan(self, robot_id: str, callback: Callable[[Plan], None]) -> None:
-        self._subscribe(f"res/plan/{robot_id}", lambda body: callback(decode_plan(body)))
+        self._subscribe(self._full(f"{robot_id}/plan"), lambda body: callback(decode_plan(body)))
 
     def subscribe_committed_locations_request(self, callback: Callable[[str], None]) -> None:
-        self._subscribe("res/committed_locations_request", lambda body: callback(decode_committed_locations_request(body)))
+        self._subscribe(
+            self._full("committed_locations/request"),
+            lambda body: callback(decode_committed_locations_request(body)),
+        )
 
     # ------------------------------------------------------------------ #
     # ExecutorBaseTransport — publishes                                    #
     # ------------------------------------------------------------------ #
 
     def publish_committed_locations_response(self, response_msg: CommittedLocationsResponseMsg) -> None:
-        self._publish("res/committed_locations_response", encode_dataclass(response_msg))
+        self._publish(self._full("committed_locations/response"), encode_dataclass(response_msg))
 
     def publish_progress(self, robot_id: str, progress_msg: PlanProgressMsg) -> None:
-        self._publish(f"res/plan_progress/{robot_id}", encode_dataclass(progress_msg))
+        self._publish(self._full(f"{robot_id}/plan/progress"), encode_dataclass(progress_msg))
 
     def publish_plan_error(self, robot_id: str, error_msg: PlanErrorMsg) -> None:
-        self._publish(f"res/plan_error/{robot_id}", encode_dataclass(error_msg))
+        self._publish(self._full(f"{robot_id}/plan/error"), encode_dataclass(error_msg))
 
     def publish_task_status(self, update: TaskStatusUpdate) -> None:
-        self._publish("res/task_status", encode_dataclass(update))
+        self._publish(self._full("task_status"), encode_dataclass(update))
 
     # ------------------------------------------------------------------ #
     # Lifecycle                                                            #

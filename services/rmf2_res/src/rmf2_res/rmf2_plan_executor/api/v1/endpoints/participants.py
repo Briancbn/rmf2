@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 from res_plan_server.transport.transport_messages import ParticipantDiscoveryMsg
 
-from rmf2_plan_executor.api.deps.transport import TransportDeps
-from rmf2_plan_executor.transport.serializer import encode_dataclass
+from rmf2_res.rmf2_plan_executor.api.deps.transport import TransportDeps
+from rmf2_res.rmf2_plan_executor.transport.serializer import encode_dataclass
 
 router = APIRouter(prefix="/participants", tags=["participants"])
 
@@ -23,5 +23,5 @@ def discover_participants(
     body: ParticipantDiscoveryRequest, transport: TransportDeps
 ) -> ParticipantDiscoveryResponse:
     msg = ParticipantDiscoveryMsg(participants=body.participants)
-    transport._publish("res/participant_discovery", encode_dataclass(msg))
+    transport._publish(transport._full("participant_discovery"), encode_dataclass(msg))
     return ParticipantDiscoveryResponse(status="published", participants=body.participants)

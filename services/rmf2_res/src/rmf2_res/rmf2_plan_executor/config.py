@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliSettingsSource,
@@ -16,6 +16,7 @@ from pydantic_settings import (
     SettingsConfigDict,
     TomlConfigSettingsSource,
 )
+from res_plan_server.transport.transport_messages import RobotOnboardMsg
 
 _MODE = os.environ.get("MODE", "dev")
 _ENV_FILES = [".env", f".env.{_MODE}"]
@@ -53,6 +54,7 @@ class Settings(BaseSettings):
         env_prefix="RMF2_PE__",
         env_nested_delimiter="__",
         toml_file=_TOML_FILES,
+        extra="ignore",
     )
 
     host: str = Field(default="0.0.0.0", description="Host address for the FastAPI server to bind to")
@@ -60,9 +62,35 @@ class Settings(BaseSettings):
     root_path: str = Field(default="", description="ASGI root_path when running behind a reverse proxy with a path prefix")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
     amqp: AmqpSettings = Field(default_factory=AmqpSettings)
+    topic_prefix: str = Field(
+        default="rmf2_plan_executor/v1",
+        description="AMQP topic prefix for plan_executor-bound topics — must match "
+        "rmf2_plan_server's plan_executor_topic_prefix for the two services to talk to each other.",
+    )
     vm: VmSettings = Field(default_factory=VmSettings)
     agents: List[AgentConfig] = Field(default=[], description="Agent-to-VDA5050 mappings")
+    robots: List[RobotOnboardMsg] = Field(
+        default_factory=list,
+        description="Alias for `agents`, using rmf2_plan_server's `[[robots]]` config.toml schema "
+        "(robot_id formatted as 'manufacturer/serial_number'). Converted and appended to `agents`.",
+    )
     map_path: Path | None = None
+
+    @model_validator(mode="after")
+    def _merge_robots_alias(self) -> Settings:
+        if self.robots:
+            self.agents = [
+                *self.agents,
+                *(
+                    AgentConfig(
+                        agent_id=robot.robot_id,
+                        manufacturer=robot.robot_id.partition("/")[0],
+                        serial_number=robot.robot_id.partition("/")[2],
+                    )
+                    for robot in self.robots
+                ),
+            ]
+        return self
 
     @classmethod
     def settings_customise_sources(

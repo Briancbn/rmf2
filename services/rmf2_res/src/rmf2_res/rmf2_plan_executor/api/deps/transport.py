@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from rmf2_plan_executor.transport.amqp import AmqpExecutorTransport
+from rmf2_res.rmf2_plan_executor.transport.amqp import AmqpExecutorTransport
 
 
 def get_transport(request: Request) -> AmqpExecutorTransport:

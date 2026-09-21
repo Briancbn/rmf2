@@ -14,6 +14,8 @@ dependencies = [
     "pydantic-settings[toml]>=2.15.0",
     "python-multipart>=0.0.20",
     "res-map",
+    "res-mapf-planning",
+    "res-plan-execution",
     "res-plan-server",
     "sqlalchemy>=2.0.52",
     "uvicorn>=0.52.4",
@@ -21,10 +23,13 @@ dependencies = [
 
 [project.scripts]
 rmf2_plan_server = "rmf2_res.rmf2_plan_server.cli:main"
+rmf2_plan_executor = "rmf2_res.rmf2_plan_executor.cli:main"
 
 [tool.uv.sources]
 res-plan-server = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_server" }
 res-map = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_map" }
+res-mapf-planning = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_mapf_planning" }
+res-plan-execution = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution" }
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]

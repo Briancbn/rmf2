@@ -16,7 +16,7 @@ from res_plan_execution.robot_controllers.base_robot_controller import (
     WaypointWithCallback,
 )
 
-from rmf2_plan_executor.logger import get_logger
+from rmf2_res.logger import get_logger
 
 LOGGER = get_logger(__name__)
 

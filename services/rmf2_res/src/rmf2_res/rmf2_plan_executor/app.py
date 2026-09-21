@@ -9,11 +9,13 @@ from res_map.map_data import MapData
 from res_plan_execution.plan_execution.dependency_manager import DependencyManager
 from res_plan_execution.plan_execution.plan_executor import PlanExecutor
 
-from rmf2_plan_executor.api import api_router
-from rmf2_plan_executor.config import _MODE, settings
-from rmf2_plan_executor.logger import setup_logging
-from rmf2_plan_executor.robot_controller import Vda5050RobotController
-from rmf2_plan_executor.transport.amqp import AmqpExecutorTransport
+from rmf2_res.rmf2_plan_executor.api import api_router
+from rmf2_res.rmf2_plan_executor.config import _MODE, settings
+from rmf2_res.logger import setup_logging
+from rmf2_res.rmf2_plan_executor.robot_controller import Vda5050RobotController
+from rmf2_res.rmf2_plan_executor.transport.amqp import AmqpExecutorTransport
+
+setup_logging()
 
 config = settings()
 
@@ -23,8 +25,6 @@ _redoc_url = None if _MODE == "prod" else "/redoc"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_logging()
-
     map_data = lif_parser.load_lif(config.map_path) if config.map_path else MapData(world_positions={}, world_position_to_name={}, edges=[])
 
     agent_map = {
@@ -32,7 +32,9 @@ async def lifespan(app: FastAPI):
         for a in config.agents
     }
 
-    transport = AmqpExecutorTransport(url=config.amqp.url, exchange=config.amqp.exchange)
+    transport = AmqpExecutorTransport(
+        url=config.amqp.url, exchange=config.amqp.exchange, topic_prefix=config.topic_prefix
+    )
     robot_controller = Vda5050RobotController(
         map_data=map_data,
         amqp_url=config.amqp.url,

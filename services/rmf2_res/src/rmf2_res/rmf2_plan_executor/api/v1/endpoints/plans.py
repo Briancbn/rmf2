@@ -3,8 +3,8 @@ import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from rmf2_plan_executor.api.deps.transport import TransportDeps
-from rmf2_plan_executor.transport.serializer import decode_plan, encode_dataclass
+from rmf2_res.rmf2_plan_executor.api.deps.transport import TransportDeps
+from rmf2_res.rmf2_plan_executor.transport.serializer import decode_plan, encode_dataclass
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -24,5 +24,5 @@ def inject_plan(robot_id: str, body: dict, transport: TransportDeps) -> PlanInje
         plan = decode_plan(json.dumps(body))
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid plan body: {exc}") from exc
-    transport._publish(f"res/plan/{robot_id}", encode_dataclass(plan))
+    transport._publish(transport._full(f"{robot_id}/plan"), encode_dataclass(plan))
     return PlanInjectResponse(status="published", robot_id=robot_id)

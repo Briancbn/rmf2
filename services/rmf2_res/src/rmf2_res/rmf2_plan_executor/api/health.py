@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from rmf2_plan_executor.models import HealthResponse
+from rmf2_res.models import HealthResponse
 
 router = APIRouter()
 

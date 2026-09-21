@@ -293,7 +293,7 @@ def make_plan_server(
     wrapped_transport = RESPlanServerTransport(
         transport,
         plan_server_topic_prefix="rmf2_plan_server/v1",
-        plan_executor_topic_prefix="rmf2_plan_executor/v1",
+        plan_executor_topic_prefix=config.plan_executor_topic_prefix,
         session_factory=session_factory,
     )
     wrapped_transport.start()
