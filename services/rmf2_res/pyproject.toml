@@ -26,10 +26,10 @@ rmf2_plan_server = "rmf2_res.rmf2_plan_server.cli:main"
 rmf2_plan_executor = "rmf2_res.rmf2_plan_executor.cli:main"
 
 [tool.uv.sources]
-res-plan-server = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_server" }
+res-plan-server = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_server", rev = "362d2dc5145194f2d14403ad432cbda669026da1" }
 res-map = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_map" }
-res-mapf-planning = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_mapf_planning" }
-res-plan-execution = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution" }
+res-mapf-planning = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_mapf_planning", rev = "362d2dc5145194f2d14403ad432cbda669026da1" }
+res-plan-execution = { git = "https://github.com/ros-industrial/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution", rev = "362d2dc5145194f2d14403ad432cbda669026da1" }
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]

@@ -240,7 +240,7 @@ def save_task_status(db: Session, update: TaskStatusUpdate) -> None:
 
 
 def save_plan_progress(db: Session, robot_id: str, message: PlanProgressMsg) -> None:
-    plan_id = f"{message.plan_id.destination_uuid}-{message.plan_id.plan_version}"
+    plan_id = f"{message.plan_id.destination_session}-{message.plan_id.plan_version}"
     status = "COMPLETED" if message.reached_waypoint == message.target_waypoint else "IN_PROGRESS"
     fields = dict(
         robot_id=robot_id,
@@ -257,7 +257,7 @@ def save_plan_progress(db: Session, robot_id: str, message: PlanProgressMsg) -> 
 
 
 def save_plan_error(db: Session, robot_id: str, message: PlanErrorMsg) -> None:
-    plan_id = f"{message.plan_id.destination_uuid}-{message.plan_id.plan_version}"
+    plan_id = f"{message.plan_id.destination_session}-{message.plan_id.plan_version}"
     fields = dict(
         robot_id=robot_id,
         status="FAILED",
@@ -279,10 +279,11 @@ class RESPlanServerContext:
     agent_context: MultiAgentContext | None
     coordinator: MAPFCoordinator | None
     solver: CBSAdapter | None
-    # Keyed by the exact {robot_id: goal} problem solved — lets an identical
-    # "submit" request bypass re-planning and dispatch the cached plan directly.
-    # Value maps robot_id -> (plan, final_waypoint_index).
-    plan_cache: dict[frozenset[tuple[str, str]], dict[str, tuple[Plan, int]]]
+    # At most one cached plan: the exact {robot_id: goal} problem it solved, paired
+    # with robot_id -> (plan, final_waypoint_index). A "plan" call sets it (always
+    # overwriting whatever was cached before), a "submit" for the same problem
+    # consumes (clears) it.
+    plan_cache: tuple[dict[str, str], dict[str, tuple[Plan, int]]] | None
 
 @contextmanager
 def make_plan_server(
@@ -313,13 +314,16 @@ def make_plan_server(
                 agent_context=None,
                 coordinator=None,
                 solver=None,
-                plan_cache={},
+                plan_cache=None,
             )
         finally:
             wrapped_transport.stop()
         return
 
     LOGGER.info("Loading map from %s", config.map_path)
+    if session_factory is not None:
+        with session_factory() as session:
+            crud.lif_record.set_current(session, config.map_path.read_text(), datetime.now(timezone.utc))
     map_data = lif_parser.load_lif(config.map_path)
     grid_map = snap_to_grid(map_data)
     grid_map.obstacles = infer_obstacles(map_data, grid_map)
@@ -365,7 +369,7 @@ def make_plan_server(
             agent_context=agent_context,
             coordinator=coordinator,
             solver=solver,
-            plan_cache={},
+            plan_cache=None,
         )
     finally:
         LOGGER.info("Stopping plan server")

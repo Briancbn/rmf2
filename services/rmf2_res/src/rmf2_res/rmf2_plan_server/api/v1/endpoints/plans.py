@@ -10,12 +10,14 @@ router = APIRouter()
 
 @router.get("/cache")
 def get_plan_cache(context: ContextDeps) -> list[PlanCacheEntry]:
+    if context.plan_cache is None:
+        return []
+    problem, cached = context.plan_cache
     return [
         PlanCacheEntry(
-            problem=[{"robot_id": robot_id, "goal": goal} for robot_id, goal in sorted(problem_key)],
+            problem=[{"robot_id": robot_id, "goal": goal} for robot_id, goal in sorted(problem.items())],
             plans={robot_id: plan for robot_id, (plan, _) in cached.items()},
         )
-        for problem_key, cached in context.plan_cache.items()
     ]
 
 

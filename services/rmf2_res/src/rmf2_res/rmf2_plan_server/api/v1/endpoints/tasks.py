@@ -32,10 +32,10 @@ def get_task_status(task_id: str, db: DbSession) -> TaskRecordStatus:
     return TaskRecordStatus.model_validate(record)
 
 
-def _problem_key(tasks: list[TaskRequestMsg]) -> frozenset[tuple[str, str]]:
+def _problem_key(tasks: list[TaskRequestMsg]) -> dict[str, str]:
     """Identifies the exact MAPF problem a batch of tasks poses — same robots
     wanting the same goals, regardless of task_id."""
-    return frozenset((task.robot_id, task.goal) for task in tasks)
+    return {task.robot_id: task.goal for task in tasks}
 
 
 def _normalize_positions(plans: list[Plan]) -> None:
@@ -115,13 +115,16 @@ async def submit_tasks(
       interrupt ongoing plans).
     - ``"plan"``: requests real committed locations from the executor and plans
       against them, so ongoing plans for other robots are properly accounted
-      for. Still does not dispatch anything.
-    - ``"submit"``: always blocks to plan, the same way ``"plan"`` does, then
-      dispatches (publishes) the result and registers it with the real
-      PlanServer's tracking so its progress/error callbacks recognize it. The
-      resulting plan is cached by the exact ``{robot_id: goal}`` problem it
-      solved — an identical follow-up ``"submit"`` request skips committed
-      locations and solving entirely and redispatches the cached plan.
+      for. Still does not dispatch anything. The resulting plan is cached by
+      the exact ``{robot_id: goal}`` problem it solved, so a follow-up
+      ``"submit"`` for the same problem can dispatch it directly.
+    - ``"submit"``: if a ``"plan"`` call already cached a plan for the exact
+      same problem, dispatches that cached plan directly (skipping committed
+      locations and solving entirely) and clears the cache entry. Otherwise
+      blocks to plan the same way ``"plan"`` does, then dispatches — without
+      caching, since only ``"plan"`` populates the cache. Either way,
+      dispatching (publishing) the result registers it with the real
+      PlanServer's tracking so its progress/error callbacks recognize it.
     """
     if context.agent_context is None or context.coordinator is None:
         return TaskSubmitResponse(
@@ -154,18 +157,21 @@ async def submit_tasks(
             )
         )
 
+    plan_tasks = [PlanTask(task_id=task.task_id, robot_id=task.robot_id, goal=task.goal) for task in tasks]
+
     if mode == "submit":
         if context.plan_server is None:
             return TaskSubmitResponse(
                 decision="REJECTED", errors=["Plan server not started (no map configured)"], plans=[]
             )
-        cached = context.plan_cache.get(problem_key)
-        if cached is not None:
+        if context.plan_cache is not None and context.plan_cache[0] == problem_key:
+            _, cached = context.plan_cache
+            context.plan_cache = None
+            plan_ids = {robot_id: plan.plan_id for robot_id, (plan, _) in cached.items()}
+            context.agent_context.on_solve_success({}, plan_tasks, plan_ids)
             for robot_id, (plan, final_waypoint) in cached.items():
                 _dispatch(robot_id, plan, final_waypoint)
             return TaskSubmitResponse(decision="ACCEPTED", errors=[], plans=[p for p, _ in cached.values()])
-
-    plan_tasks = [PlanTask(task_id=task.task_id, robot_id=task.robot_id, goal=task.goal) for task in tasks]
 
     if mode == "dry_run":
         if context.agent_context.has_executing_agents():
@@ -201,10 +207,13 @@ async def submit_tasks(
         return TaskSubmitResponse(decision="REJECTED", errors=["Solver failed to produce a plan"], plans=[])
     robot_to_plan, robot_to_final_waypoint = solved
 
+    if mode == "plan":
+        context.plan_cache = (
+            problem_key,
+            {robot_id: (plan, robot_to_final_waypoint[robot_id]) for robot_id, plan in robot_to_plan.items()},
+        )
+
     if mode == "submit":
-        context.plan_cache[problem_key] = {
-            robot_id: (plan, robot_to_final_waypoint[robot_id]) for robot_id, plan in robot_to_plan.items()
-        }
         context.agent_context.on_solve_success(committed_locations, plan_tasks, plan_ids)
         for robot_id, plan in robot_to_plan.items():
             _dispatch(robot_id, plan, robot_to_final_waypoint[robot_id])

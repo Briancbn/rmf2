@@ -16,13 +16,15 @@ _DACITE_CONFIG = Config(cast=[Enum, UUID, tuple], type_hooks={datetime: datetime
 
 
 def _json_default(obj: Any) -> Any:
-    """Handle dataclass field types ``asdict`` leaves as-is: Enum, datetime/date, UUID."""
+    """Handle dataclass field types ``asdict`` leaves as-is: Enum, datetime/date, UUID, set."""
     if isinstance(obj, Enum):
         return obj.value
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
     if isinstance(obj, UUID):
         return str(obj)
+    if isinstance(obj, (set, frozenset)):
+        return list(obj)
     raise TypeError(f"Object of type {type(obj).__name__!r} is not JSON serializable")
 
 

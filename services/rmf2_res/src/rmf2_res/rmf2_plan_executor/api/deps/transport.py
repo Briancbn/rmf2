@@ -2,11 +2,11 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from rmf2_res.rmf2_plan_executor.transport.amqp import AmqpExecutorTransport
+from rmf2_res.rmf2_plan_executor.plan_executor import RESPlanExecutorTransport
 
 
-def get_transport(request: Request) -> AmqpExecutorTransport:
-    return request.app.state.transport
+def get_transport(request: Request) -> RESPlanExecutorTransport:
+    return request.app.state.context.transport
 
 
-TransportDeps = Annotated[AmqpExecutorTransport, Depends(get_transport)]
+TransportDeps = Annotated[RESPlanExecutorTransport, Depends(get_transport)]

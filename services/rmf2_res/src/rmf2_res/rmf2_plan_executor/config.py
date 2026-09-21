@@ -75,6 +75,10 @@ class Settings(BaseSettings):
         "(robot_id formatted as 'manufacturer/serial_number'). Converted and appended to `agents`.",
     )
     map_path: Path | None = None
+    database_url: str = Field(
+        default="sqlite:///./rmf2_plan_executor.db",
+        description="SQLAlchemy database URL for tracking onboarded robots, task status, and plan progress",
+    )
 
     @model_validator(mode="after")
     def _merge_robots_alias(self) -> Settings:

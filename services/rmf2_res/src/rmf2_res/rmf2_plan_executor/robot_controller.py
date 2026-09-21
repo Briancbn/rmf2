@@ -8,20 +8,21 @@ from typing import Dict, List, Optional
 from uuid import uuid4
 
 import networkx as nx
-import pika
-from pika.adapters.select_connection import SelectConnection
 from res_map.map_data import MapData
 from res_plan_execution.robot_controllers.base_robot_controller import (
     BaseRobotController,
     WaypointWithCallback,
 )
+from res_plan_server.transport.transport_messages import PlanErrorCode
 
 from rmf2_res.logger import get_logger
+from rmf2_res.transport import PublisherBase, ServerTransportBase, SubscriberBase
 
 LOGGER = get_logger(__name__)
 
 _TOPIC_PREFIX = "rmf2_vda5050_master/v1"
-_ASSIGN_ORDER_ROUTING_KEY = _TOPIC_PREFIX.replace("/", ".") + ".assign_order"
+_ASSIGN_ORDER_TOPIC = f"{_TOPIC_PREFIX}/assign_order"
+_ASSIGN_ORDER_RESULT_TOPIC = f"{_TOPIC_PREFIX}/assign_order_result"
 
 
 def _build_lif_graph(lif_json: str) -> tuple[nx.DiGraph, dict, str]:
@@ -46,6 +47,7 @@ def _build_order_json(
     graph: nx.DiGraph,
     node_map: dict,
     map_id: str,
+    order_id: str,
 ) -> str:
     nodes = []
     for seq, node_id in enumerate(node_ids):
@@ -81,7 +83,7 @@ def _build_order_json(
         "version": "2.0.0",
         "manufacturer": manufacturer,
         "serialNumber": serial_number,
-        "orderId": str(uuid4()),
+        "orderId": order_id,
         "orderUpdateId": 0,
         "nodes": nodes,
         "edges": edges,
@@ -92,22 +94,27 @@ class Vda5050RobotController(BaseRobotController):
     """Robot controller that drives robots through rmf2_vda5050_master.
 
     Publishes a single VDA5050 Order (all plan waypoints in one message) to
-    AMQP ``rmf2_vda5050_master/v1/assign_order`` and subscribes to
+    ``rmf2_vda5050_master/v1/assign_order`` and subscribes to
     ``rmf2_vda5050_master/v1/{manufacturer}/{serial_number}/state`` to detect
     each waypoint arrival via ``lastNodeId``, then fires ``on_reached()``.
+
+    Also subscribes to ``rmf2_vda5050_master/v1/assign_order_result`` to detect
+    order rejections and report them via ``self._on_robot_failed`` (set by
+    ``PlanExecutor.set_failure_callback``).
+
+    Uses the shared :class:`ServerTransportBase` (the same one plan_executor's
+    own transport is built on) rather than managing its own AMQP connection.
     """
 
     def __init__(
         self,
         map_data: MapData,
-        amqp_url: str,
-        amqp_exchange: str,
+        transport: ServerTransportBase,
         agent_map: Dict[str, Dict[str, str]],
         lif_path: Optional[Path] = None,
     ) -> None:
         super().__init__(map_data)
-        self._amqp_url = amqp_url
-        self._amqp_exchange = amqp_exchange
+        self._transport = transport
         self._agent_map = agent_map
 
         self._graph: Optional[nx.DiGraph] = None
@@ -128,25 +135,30 @@ class Vda5050RobotController(BaseRobotController):
         self._arrival_events: Dict[str, Dict[str, threading.Event]] = {}
         self._events_lock = threading.Lock()
 
-        self._running = False
-        self._connection: Optional[SelectConnection] = None
-        self._channel = None
-        self._ioloop_thread: Optional[threading.Thread] = None
+        # Per-order assign_order_result correlation: {order_id: Event / result}
+        self._order_result_events: Dict[str, threading.Event] = {}
+        self._order_results: Dict[str, dict] = {}
+        self._order_lock = threading.Lock()
+
+        self._order_publisher: Optional[PublisherBase] = None
+        self._subscribers: List[SubscriberBase] = []
 
     def start(self) -> None:
-        self._running = True
-        self._ioloop_thread = threading.Thread(
-            target=self._run_amqp, daemon=True, name="vda5050-rc-amqp"
+        self._order_publisher = self._transport.create_publisher(str, _ASSIGN_ORDER_TOPIC)
+        self._subscribers.append(
+            self._transport.create_subscriber(str, _ASSIGN_ORDER_RESULT_TOPIC, self._on_order_result)
         )
-        self._ioloop_thread.start()
+        for robot_id, info in self._agent_map.items():
+            topic = f"{_TOPIC_PREFIX}/{info['manufacturer']}/{info['serial_number']}/state"
+            self._subscribers.append(
+                self._transport.create_subscriber(str, topic, lambda body, rid=robot_id: self._on_state(rid, body))
+            )
+        LOGGER.info("Vda5050RobotController subscribed to state and order-result topics")
 
     def shutdown(self, interrupted: bool = False) -> None:
-        self._running = False
-        conn = self._connection
-        if conn:
-            conn.ioloop.add_callback_threadsafe(conn.close)
-        if self._ioloop_thread:
-            self._ioloop_thread.join(timeout=5.0)
+        for subscriber in self._subscribers:
+            subscriber.unsubscribe()
+        self._subscribers.clear()
         LOGGER.info("Vda5050RobotController shut down (interrupted=%s)", interrupted)
 
     def enqueue(self, robot_id: str, waypoints_with_callbacks: List[WaypointWithCallback]) -> None:
@@ -183,18 +195,58 @@ class Vda5050RobotController(BaseRobotController):
                 robot_events[node_id] = ev
                 events[node_id] = ev
 
-        # Build and publish a single VDA5050 Order with all waypoints
-        try:
-            order_json = _build_order_json(mfr, sn, node_ids, self._graph, self._node_map, self._map_id)
-        except Exception:
-            LOGGER.exception("Failed to build VDA5050 order for %s", robot_id)
+        def _clear_arrival_events() -> None:
             with self._events_lock:
                 for node_id in node_ids:
                     self._arrival_events.get(robot_id, {}).pop(node_id, None)
+
+        # Register order-result correlation BEFORE publishing
+        order_id = str(uuid4())
+        result_event = threading.Event()
+        with self._order_lock:
+            self._order_result_events[order_id] = result_event
+
+        # Build and publish a single VDA5050 Order with all waypoints
+        try:
+            order_json = _build_order_json(mfr, sn, node_ids, self._graph, self._node_map, self._map_id, order_id)
+        except Exception:
+            LOGGER.exception("Failed to build VDA5050 order for %s", robot_id)
+            _clear_arrival_events()
+            with self._order_lock:
+                self._order_result_events.pop(order_id, None)
             return
 
-        self._publish_threadsafe(_ASSIGN_ORDER_ROUTING_KEY, order_json.encode())
-        LOGGER.info("Published VDA5050 order to %s for %s/%s", _ASSIGN_ORDER_ROUTING_KEY, mfr, sn)
+        self._order_publisher.publish(order_json)
+        LOGGER.info("Published VDA5050 order %s to %s for %s/%s", order_id, _ASSIGN_ORDER_TOPIC, mfr, sn)
+
+        # Wait briefly for rmf2_vda5050_master's assign_order_result acknowledgement.
+        # It publishes this synchronously right after validating the order, so a
+        # rejection (e.g. unknown AGV, invalid route) should arrive well within this.
+        acknowledged = result_event.wait(timeout=10.0)
+        with self._order_lock:
+            result = self._order_results.pop(order_id, None)
+            self._order_result_events.pop(order_id, None)
+
+        if not acknowledged:
+            LOGGER.warning(
+                "No assign_order_result for order %s (robot %s) within timeout — proceeding optimistically",
+                order_id,
+                robot_id,
+            )
+        elif result is not None and result.get("decision") != "ASSIGNED":
+            # rmf2_vda5050_master's OrderAssignmentDecision has exactly one success
+            # value ("ASSIGNED") — everything else (AGV_OFFLINE, AGV_NOT_ONBOARDED,
+            # AGV_NOT_READY, AGV_MODE_NOT_AUTO, AGV_POSITION_NOT_INITIALIZED,
+            # AGV_NO_STATE_YET, AGV_QUEUE_FULL, STITCH_REJECTED, etc.) means the
+            # order was not accepted for execution.
+            details = (
+                f"VDA5050 order {order_id} not assigned for {robot_id}: "
+                f"{result.get('decision')} {result.get('errors')}"
+            )
+            LOGGER.error(details)
+            _clear_arrival_events()
+            self._on_robot_failed(robot_id, PlanErrorCode.INCOMPATIBLE_ACTION, details)
+            return
 
         # Wait for each waypoint in sequence
         for wpc in waypoints_with_callbacks:
@@ -213,96 +265,23 @@ class Vda5050RobotController(BaseRobotController):
                 LOGGER.warning("Timeout waiting for robot %s to reach %s", robot_id, target)
                 break
 
-    def _publish_threadsafe(self, routing_key: str, body: bytes) -> None:
-        conn = self._connection
-        if conn is None:
-            LOGGER.error("Cannot publish: AMQP not connected")
-            return
-
-        def _do_publish() -> None:
-            ch = self._channel
-            if ch is None:
-                LOGGER.error("Cannot publish: AMQP channel not open")
+    def _on_order_result(self, body: str) -> None:
+        try:
+            result = json.loads(body)
+            order = result.get("order") or {}
+            order_id = order.get("orderId")
+            if order_id is None:
                 return
-            ch.basic_publish(
-                exchange=self._amqp_exchange,
-                routing_key=routing_key,
-                body=body,
-                properties=pika.BasicProperties(content_type="application/json", delivery_mode=2),
-            )
+            with self._order_lock:
+                event = self._order_result_events.get(order_id)
+                if event is None:
+                    return
+                self._order_results[order_id] = result
+            event.set()
+        except Exception:
+            LOGGER.exception("Error processing assign_order_result")
 
-        conn.ioloop.add_callback_threadsafe(_do_publish)
-
-    # ---- AMQP state subscription ----
-
-    def _run_amqp(self) -> None:
-        while self._running:
-            try:
-                self._connection = SelectConnection(
-                    pika.URLParameters(self._amqp_url),
-                    on_open_callback=self._on_connected,
-                    on_open_error_callback=self._on_open_error,
-                    on_close_callback=self._on_closed,
-                )
-                self._connection.ioloop.start()
-            except Exception as exc:
-                LOGGER.warning("AMQP ioloop error: %s", exc)
-                self._connection = None
-                self._channel = None
-            if self._running:
-                threading.Event().wait(timeout=5.0)
-
-    def _on_connected(self, connection) -> None:
-        connection.channel(on_open_callback=self._on_channel_open)
-
-    def _on_channel_open(self, channel) -> None:
-        self._channel = channel
-        channel.exchange_declare(
-            exchange=self._amqp_exchange,
-            exchange_type="topic",
-            durable=True,
-            callback=self._on_exchange_declared,
-        )
-
-    def _on_exchange_declared(self, _frame) -> None:
-        LOGGER.info("Vda5050RobotController AMQP connected — subscribing to state topics")
-        for robot_id, info in self._agent_map.items():
-            self._bind_state_topic(robot_id, info["manufacturer"], info["serial_number"])
-
-    def _bind_state_topic(self, robot_id: str, manufacturer: str, serial_number: str) -> None:
-        routing_key = f"{_TOPIC_PREFIX}/{manufacturer}/{serial_number}/state".replace("/", ".")
-        channel = self._channel
-        if channel is None:
-            return
-        channel.queue_declare(
-            queue="",
-            exclusive=True,
-            callback=lambda result, rid=robot_id, rk=routing_key: self._on_queue_declared(result, rid, rk),
-        )
-
-    def _on_queue_declared(self, result, robot_id: str, routing_key: str) -> None:
-        queue_name = result.method.queue
-        channel = self._channel
-        if channel is None:
-            return
-        channel.queue_bind(
-            exchange=self._amqp_exchange,
-            queue=queue_name,
-            routing_key=routing_key,
-            callback=lambda _: self._on_queue_bound(queue_name, robot_id),
-        )
-
-    def _on_queue_bound(self, queue_name: str, robot_id: str) -> None:
-        channel = self._channel
-        if channel is None:
-            return
-        channel.basic_consume(
-            queue=queue_name,
-            on_message_callback=lambda ch, method, props, body: self._on_state(robot_id, body),
-            auto_ack=True,
-        )
-
-    def _on_state(self, robot_id: str, body: bytes) -> None:
+    def _on_state(self, robot_id: str, body: str) -> None:
         try:
             state = json.loads(body)
             last_node = state.get("lastNodeId")
@@ -315,14 +294,3 @@ class Vda5050RobotController(BaseRobotController):
                     event.set()
         except Exception:
             LOGGER.exception("Error processing state for %s", robot_id)
-
-    def _on_open_error(self, connection, error) -> None:
-        LOGGER.warning("AMQP open error: %s", error)
-        self._connection = None
-        connection.ioloop.stop()
-
-    def _on_closed(self, connection, reason) -> None:
-        LOGGER.warning("AMQP closed: %s", reason)
-        self._channel = None
-        self._connection = None
-        connection.ioloop.stop()
