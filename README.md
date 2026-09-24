@@ -66,7 +66,7 @@ The hosted documentation is available at <https://dev.rmf-industrial.org/latest>
       <td>
         <p align="center">
           Warehouse Demonstration
-          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260611.zip">Download Link</a>)
+          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260902.zip">Download Link</a>)
         </p>
       </td>
     </tr>
@@ -78,7 +78,7 @@ The hosted documentation is available at <https://dev.rmf-industrial.org/latest>
 Download the latest simulation
 
 ```sh
-curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260611.zip
+curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260902.zip
 ```
 
 Unzip the simulation
