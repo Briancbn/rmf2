@@ -72,6 +72,9 @@ services:
         condition: service_healthy
     networks:
       - rmf2-net
+    volumes:
+      - ./demos/warehouse/warehouse.lif.json:/app/data/warehouse.lif.json:ro
+      - ./demos/warehouse/agv_config.toml:/app/config.toml:ro
     environment:
       MODE: dev
       RMF2_PS__HOST: "0.0.0.0"
@@ -80,7 +83,7 @@ services:
       RMF2_PS__TRANSPORT: amqp
       RMF2_PS__AMQP__URL: "amqp://guest:guest@amqp-broker/"
       RMF2_PS__AMQP__EXCHANGE: rmf2
-      RMF2_PS__MAP_PATH: "data/basic_grid.lif.json"
+      RMF2_PS__MAP_PATH: "data/warehouse.lif.json"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
