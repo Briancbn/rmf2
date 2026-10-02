@@ -84,8 +84,8 @@ curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260902.zip
 Unzip the simulation
 
 ```sh
-unzip RMF2_SIM_20260611.zip
-cd ./RMF2_SIM_20260611
+unzip RMF2_SIM_20260902.zip
+cd ./RMF2_SIM_20260902
 ```
 
 Start the simulation
