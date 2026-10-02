@@ -45,7 +45,13 @@ The hosted documentation is available at <https://dev.rmf-industrial.org/latest>
 | Task Scheduler | <https://github.com/ros-industrial/rmf2_scheduler> |
 | Web UI | <https://github.com/ros-industrial/rmf2-ui> |
 
+## How to start
 
+Use the development mode
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
 
 ## Demonstrations
 
