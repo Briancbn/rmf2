@@ -55,20 +55,21 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self, db: Session, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         """
-        Get multiple objects.
+        Get multiple objects, latest (highest id) first.
 
         :param db: The database connection.
         :param int skip: Number of rows to skip.
         :param int limit: Limit of rows to return.
         :returns: The database objects.
         """
-        return db.query(self.model).offset(skip).limit(limit).all()
+        return db.query(self.model).order_by(self.model.id.desc()).offset(skip).limit(limit).all()
 
     def get_multi_from_attr(
         self, db: Session, filters: dict[str, Any], *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         """
-        Get multiple Objects when its attribute matches the specified value.
+        Get multiple Objects when its attribute matches the specified value,
+        latest (highest id) first.
 
         :param db: The database connection
         :param filter: The attribute name and
@@ -84,7 +85,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                     f"Attribute {attr} does not exist in {type(self.model)}"
                 )
             db_query = db_query.filter(getattr(self.model, attr) == value)
-        return db_query.offset(skip).limit(limit).all()
+        return db_query.order_by(self.model.id.desc()).offset(skip).limit(limit).all()
 
     def create(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
         """

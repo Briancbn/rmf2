@@ -56,6 +56,7 @@ services:
     build:
       context: ./services/rmf2_res
       dockerfile: Dockerfile
+    command: ["uv", "run", "rmf2_plan_server"]
     develop:
       watch:
         - action: sync
@@ -98,6 +99,52 @@ services:
       - "traefik.http.routers.rmf2-ps.middlewares=rmf2-ps-strip"
       - "traefik.http.services.rmf2-ps.loadbalancer.server.port=8000"
 
+  rmf2-plan-executor:
+    build:
+      context: ./services/rmf2_res
+      dockerfile: Dockerfile
+    command: ["uv", "run", "rmf2_plan_executor"]
+    develop:
+      watch:
+        - action: sync
+          path: ./services/rmf2_res/src
+          target: /app/src
+          ignore:
+            - __pycache__/
+        - action: rebuild
+          path: ./services/rmf2_res/pyproject.toml
+        - action: rebuild
+          path: ./services/rmf2_res/uv.lock
+    depends_on:
+      amqp-broker:
+        condition: service_healthy
+    networks:
+      - rmf2-net
+    volumes:
+      - ./demos/warehouse/warehouse.lif.json:/app/data/warehouse.lif.json:ro
+      - ./demos/warehouse/agv_config.toml:/app/config.toml:ro
+    environment:
+      MODE: dev
+      RMF2_PE__HOST: "0.0.0.0"
+      RMF2_PE__PORT: "8000"
+      RMF2_PE__ROOT_PATH: "/plan_executor"
+      RMF2_PE__TRANSPORT: amqp
+      RMF2_PE__AMQP__URL: "amqp://guest:guest@amqp-broker/"
+      RMF2_PE__AMQP__EXCHANGE: rmf2
+      RMF2_PE__MAP_PATH: "data/warehouse.lif.json"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rmf2-pe.rule=PathPrefix(`/plan_executor`)"
+      - "traefik.http.routers.rmf2-pe.entrypoints=web"
+      - "traefik.http.middlewares.rmf2-pe-strip.stripprefix.prefixes=/plan_executor"
+      - "traefik.http.routers.rmf2-pe.middlewares=rmf2-pe-strip"
+      - "traefik.http.services.rmf2-pe.loadbalancer.server.port=8000"
 #  rmf2-task-orchestrator:
 #    image: ${RMF2_TO_IMAGE:-ghcr.io/ros-industrial/rmf2_task_orchestrator/task-orchestrator:main}
 #    depends_on:

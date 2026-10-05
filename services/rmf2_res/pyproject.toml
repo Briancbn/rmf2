@@ -26,10 +26,10 @@ rmf2_plan_server = "rmf2_res.rmf2_plan_server.cli:main"
 rmf2_plan_executor = "rmf2_res.rmf2_plan_executor.cli:main"
 
 [tool.uv.sources]
-res-plan-server = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_plan_server", rev = "80d5aa59cae380a893922f8cf5a48fa30cb831ad" }
-res-map = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_map", rev = "80d5aa59cae380a893922f8cf5a48fa30cb831ad" }
-res-mapf-planning = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_mapf_planning", rev = "80d5aa59cae380a893922f8cf5a48fa30cb831ad" }
-res-plan-execution = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution", rev = "80d5aa59cae380a893922f8cf5a48fa30cb831ad" }
+res-plan-server = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_plan_server", rev = "6237f8cf726d28fc9d23f2c9aa3d3cda94924caa" }
+res-map = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_map", rev = "6237f8cf726d28fc9d23f2c9aa3d3cda94924caa" }
+res-mapf-planning = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_mapf_planning", rev = "6237f8cf726d28fc9d23f2c9aa3d3cda94924caa" }
+res-plan-execution = { git = "https://github.com/Briancbn/res_mapf", subdirectory = "res_mapf/packages/res_plan_execution", rev = "6237f8cf726d28fc9d23f2c9aa3d3cda94924caa" }
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]

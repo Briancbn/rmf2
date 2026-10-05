@@ -18,6 +18,8 @@ from pydantic_settings import (
 )
 from res_plan_server.transport.transport_messages import RobotOnboardMsg
 
+from rmf2_res.rmf2_plan_executor.models import AgvConfig
+
 _MODE = os.environ.get("MODE", "dev")
 _ENV_FILES = [".env", f".env.{_MODE}"]
 _TOML_FILES = ["config.toml", f"config.{_MODE}.toml"]
@@ -74,11 +76,23 @@ class Settings(BaseSettings):
         description="Alias for `agents`, using rmf2_plan_server's `[[robots]]` config.toml schema "
         "(robot_id formatted as 'manufacturer/serial_number'). Converted and appended to `agents`.",
     )
+    agvs: List[AgvConfig] = Field(
+        default_factory=list,
+        description="Alias for `robots`, using vda5050_master's/rmf2_plan_server's config.toml "
+        "[[agvs]] schema (manufacturer/serial_number/init_config.last_node_id). Converted and "
+        "appended to `robots`.",
+    )
     map_path: Path | None = None
     database_url: str = Field(
         default="sqlite:///./rmf2_plan_executor.db",
         description="SQLAlchemy database URL for tracking onboarded robots, task status, and plan progress",
     )
+
+    @model_validator(mode="after")
+    def _merge_agvs_alias(self) -> Settings:
+        if self.agvs:
+            self.robots = [*self.robots, *(agv.to_robot_onboard_msg() for agv in self.agvs)]
+        return self
 
     @model_validator(mode="after")
     def _merge_robots_alias(self) -> Settings:

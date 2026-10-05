@@ -279,13 +279,15 @@ def make_plan_executor(
     transport = RESPlanExecutorTransport(raw_transport, topic_prefix=config.topic_prefix, session_factory=session_factory)
     transport.start()
 
+    dependency_manager = DependencyManager()
     robot_controller = Vda5050RobotController(
         map_data=map_data,
         transport=raw_transport,
         agent_map=agent_map,
+        dependency_manager=dependency_manager,
         lif_path=config.map_path,
     )
-    executor = PlanExecutor(transport=transport, robot_controller=robot_controller, dependency_manager=DependencyManager())
+    executor = PlanExecutor(transport=transport, robot_controller=robot_controller, dependency_manager=dependency_manager)
 
     robot_controller.start()
     executor.start()

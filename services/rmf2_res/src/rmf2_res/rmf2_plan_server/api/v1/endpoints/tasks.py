@@ -1,8 +1,13 @@
+import fnmatch
+import random
+from collections import deque
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from res_mapf_planning.mapf_solve.exceptions import MapfSolverError
+from res_mapf_planning.planning.mapf_coordinator import PlanningError
 from res_mapf_planning.traffic_dependencies.models.plan import Plan
 from res_mapf_planning.traffic_dependencies.models.plan_id import PlanId
 from res_mapf_planning.traffic_dependencies.plan_generator import PlanGenerator
@@ -36,6 +41,29 @@ def _problem_key(tasks: list[TaskRequestMsg]) -> dict[str, str]:
     """Identifies the exact MAPF problem a batch of tasks poses — same robots
     wanting the same goals, regardless of task_id."""
     return {task.robot_id: task.goal for task in tasks}
+
+
+def _blocked_goal_errors(tasks: list[TaskRequestMsg], context: ContextDeps) -> list[str]:
+    """Rejects goals that coincide with a mapped obstacle cell before they reach
+    the solver. res_mapf's low-level A* search is time-expanded with no time
+    bound, so an unreachable (obstacle-blocked) goal state never gets added to
+    open_set, open_set never empties, and the search hangs forever instead of
+    failing — which would hang this endpoint (and block the whole process,
+    since coordinator.solve() runs synchronously here).
+
+    TODO: reaches into CBSAdapter's private _grid_map since nothing public
+    exposes obstacle membership; should become a public API on CBSAdapter/
+    MAPFCoordinator (res_mapf) instead.
+    """
+    if context.solver is None:
+        return []
+    grid_map = context.solver._grid_map
+    errors = []
+    for task in tasks:
+        coord = grid_map.grid_nodes.get(task.goal)
+        if coord is not None and coord in grid_map.obstacles:
+            errors.append(f"Goal '{task.goal}' for robot {task.robot_id} is blocked by an obstacle")
+    return errors
 
 
 def _normalize_positions(plans: list[Plan]) -> None:
@@ -135,6 +163,10 @@ async def submit_tasks(
     if unknown:
         return TaskSubmitResponse(decision="REJECTED", errors=[f"Unknown robot(s): {unknown}"], plans=[])
 
+    blocked = _blocked_goal_errors(tasks, context)
+    if blocked:
+        return TaskSubmitResponse(decision="REJECTED", errors=blocked, plans=[])
+
     problem_key = _problem_key(tasks)
     robot_to_task_id = {task.robot_id: task.task_id for task in tasks}
 
@@ -191,6 +223,12 @@ async def submit_tasks(
         if isinstance(result, str):
             return TaskSubmitResponse(decision="REJECTED", errors=[result], plans=[])
         committed_locations, stationary_agents = result
+        # The executor reports a robot as stationary once it has reached the end of
+        # its current plan — including one that just finished and is now getting
+        # this very batch's task. MAPFCoordinator.solve() unconditionally skips
+        # stationary agents (and converts them into obstacles), so without this
+        # exclusion a robot's second task always resolves to an empty plan.
+        stationary_agents -= {task.robot_id for task in tasks}
 
     if mode == "submit":
         # Mint plan IDs through PlanServer itself so _task_id_to_plan_id /
@@ -202,7 +240,14 @@ async def submit_tasks(
     else:
         plan_ids = {task.robot_id: PlanId(destination_session=uuid4(), plan_version=1) for task in tasks}
 
-    solved = _solve(context, plan_tasks, plan_ids, committed_locations, stationary_agents)
+    try:
+        solved = _solve(context, plan_tasks, plan_ids, committed_locations, stationary_agents)
+    except (MapfSolverError, PlanningError) as exc:
+        # e.g. an obstacle/unknown-waypoint goal, or a stationary agent occupying
+        # another agent's destination — the solver raises these rather than just
+        # returning no plan. Matches res_plan_server.PlanServer._process_batch's
+        # own handling of the same exception types for its AMQP task-request path.
+        return TaskSubmitResponse(decision="REJECTED", errors=[str(exc)], plans=[])
     if solved is None:
         return TaskSubmitResponse(decision="REJECTED", errors=["Solver failed to produce a plan"], plans=[])
     robot_to_plan, robot_to_final_waypoint = solved
@@ -219,3 +264,178 @@ async def submit_tasks(
             _dispatch(robot_id, plan, robot_to_final_waypoint[robot_id])
 
     return TaskSubmitResponse(decision="ACCEPTED", errors=[], plans=list(robot_to_plan.values()))
+
+
+def _reachable_node_names(context: ContextDeps) -> list[str]:
+    """Node names the solver can actually route through — present in the grid and
+    not an obstacle cell. Same source of truth as _blocked_goal_errors."""
+    if context.solver is None:
+        return []
+    grid_map = context.solver._grid_map
+    obstacles = set(grid_map.obstacles)
+    return sorted(name for name, coord in grid_map.grid_nodes.items() if coord not in obstacles)
+
+
+_WILDCARD_CHARS = set("*?[")
+
+
+def _expand_robot_ids(patterns: list[str], db: DbSession) -> list[str]:
+    """Expands glob patterns (e.g. ``Manufacturer/*``) in ``patterns`` against
+    onboarded robot_ids, preserving order and dropping duplicates. An entry with
+    no wildcard characters passes through unchanged — including one that isn't
+    actually onboarded, so submit_tasks's own "Unknown robot(s)" check still
+    reports it instead of this silently dropping it.
+    """
+    if not any(_WILDCARD_CHARS & set(pattern) for pattern in patterns):
+        return patterns
+
+    onboarded_ids = [record.robot_id for record in crud.robot_record.get_multi_from_attr(
+        db, {"is_onboarded": True}, skip=0, limit=1000
+    )]
+
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for pattern in patterns:
+        matches = fnmatch.filter(onboarded_ids, pattern) if _WILDCARD_CHARS & set(pattern) else [pattern]
+        for match in matches:
+            if match not in seen:
+                seen.add(match)
+                expanded.append(match)
+    return expanded
+
+
+@router.post("/random", response_model_exclude_none=True)
+async def submit_random_tasks(
+    context: ContextDeps,
+    db: DbSession,
+    mode: Literal["dry_run", "plan", "submit"] = "submit",
+    robot_ids: list[str] | None = Query(default=None),
+    seed: int | None = None,
+) -> TaskSubmitResponse:
+    """Generate a random reachable goal for each robot and submit it exactly like
+    ``POST /tasks``. Useful for stress-testing without hand-picking waypoints.
+
+    - ``robot_ids``: robots to generate a task for; defaults to all onboarded robots.
+      Supports glob wildcards against onboarded robot_ids, e.g. ``Manufacturer/*``
+      or just ``*`` for all of them.
+    - ``seed``: makes the goal selection reproducible across calls.
+
+    Goals are drawn, without replacement, from non-obstacle nodes present in the
+    solver's grid — MAPFCoordinator.solve() rejects a batch outright if two robots
+    are given the same goal, so goals in one batch are always distinct.
+    """
+    node_names = _reachable_node_names(context)
+    if not node_names:
+        return TaskSubmitResponse(
+            decision="REJECTED", errors=["No layout loaded, or it has no reachable waypoints"], plans=[]
+        )
+
+    if robot_ids is None:
+        records = crud.robot_record.get_multi_from_attr(db, {"is_onboarded": True}, skip=0, limit=1000)
+        robot_ids = [record.robot_id for record in records]
+    else:
+        robot_ids = _expand_robot_ids(robot_ids, db)
+    if not robot_ids:
+        return TaskSubmitResponse(decision="REJECTED", errors=["No onboarded robots"], plans=[])
+
+    if len(node_names) < len(robot_ids):
+        return TaskSubmitResponse(
+            decision="REJECTED",
+            errors=[f"Only {len(node_names)} reachable waypoint(s) for {len(robot_ids)} robot(s)"],
+            plans=[],
+        )
+
+    rng = random.Random(seed)
+    goals = rng.sample(node_names, k=len(robot_ids))
+    tasks = [
+        TaskRequestMsg(task_id=str(uuid4()), robot_id=robot_id, goal=goal)
+        for robot_id, goal in zip(robot_ids, goals)
+    ]
+
+    return await submit_tasks(tasks, context, mode)
+
+
+def _nodes_within_steps(start: str, steps: int, grid_map) -> list[str]:
+    """Node names reachable from ``start`` in 1..``steps`` grid hops (4-connected,
+    non-obstacle), excluding ``start`` itself. Same CBSAdapter._grid_map source
+    of truth as _reachable_node_names/_blocked_goal_errors."""
+    obstacles = set(grid_map.obstacles)
+    coord_to_name = {coord: name for name, coord in grid_map.grid_nodes.items() if coord not in obstacles}
+    start_coord = grid_map.grid_nodes.get(start)
+    if start_coord is None or start_coord in obstacles:
+        return []
+
+    visited = {start_coord}
+    frontier = deque([(start_coord, 0)])
+    reachable: list[str] = []
+    while frontier:
+        (x, y), dist = frontier.popleft()
+        if dist == steps:
+            continue
+        for neighbor in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if neighbor in coord_to_name and neighbor not in visited:
+                visited.add(neighbor)
+                reachable.append(coord_to_name[neighbor])
+                frontier.append((neighbor, dist + 1))
+    return reachable
+
+
+@router.post("/random/nearby", response_model_exclude_none=True)
+async def submit_random_nearby_tasks(
+    context: ContextDeps,
+    db: DbSession,
+    steps: int = Query(..., ge=1, description="Max grid hops from each robot's start_location"),
+    mode: Literal["dry_run", "plan", "submit"] = "submit",
+    robot_ids: list[str] | None = Query(default=None),
+    seed: int | None = None,
+) -> TaskSubmitResponse:
+    """Like ``POST /tasks/random``, but each robot's goal is drawn from nodes within
+    ``steps`` grid hops of its ``start_location`` instead of anywhere reachable on
+    the map — for exercising short, mostly-independent moves rather than long,
+    conflict-heavy crossings.
+
+    - ``robot_ids``: robots to generate a task for; defaults to all onboarded robots.
+      Supports glob wildcards against onboarded robot_ids, e.g. ``Manufacturer/*``
+      or just ``*`` for all of them.
+    - ``seed``: makes the goal selection reproducible across calls.
+
+    ``start_location`` only reflects where a robot was onboarded, not its live
+    position, so the neighbourhood this draws from can be stale for a robot
+    that has since moved. Goals are picked one robot at a time and excluded from
+    later robots' candidate pools, so a batch never assigns the same goal twice —
+    MAPFCoordinator.solve() would otherwise reject the whole batch.
+    """
+    if context.solver is None:
+        return TaskSubmitResponse(
+            decision="REJECTED", errors=["Plan server not started (no map configured)"], plans=[]
+        )
+    grid_map = context.solver._grid_map
+
+    if robot_ids is None:
+        records = crud.robot_record.get_multi_from_attr(db, {"is_onboarded": True}, skip=0, limit=1000)
+        robot_ids = [record.robot_id for record in records]
+    else:
+        robot_ids = _expand_robot_ids(robot_ids, db)
+    if not robot_ids:
+        return TaskSubmitResponse(decision="REJECTED", errors=["No onboarded robots"], plans=[])
+
+    rng = random.Random(seed)
+    used_goals: set[str] = set()
+    tasks: list[TaskRequestMsg] = []
+    errors: list[str] = []
+    for robot_id in robot_ids:
+        record = crud.robot_record.get(db, robot_id)
+        start = record.start_location if record else None
+        candidates = [name for name in _nodes_within_steps(start, steps, grid_map) if name not in used_goals] \
+            if start else []
+        if not candidates:
+            errors.append(f"No reachable waypoint within {steps} step(s) of robot {robot_id}'s start_location")
+            continue
+        goal = rng.choice(candidates)
+        used_goals.add(goal)
+        tasks.append(TaskRequestMsg(task_id=str(uuid4()), robot_id=robot_id, goal=goal))
+
+    if errors:
+        return TaskSubmitResponse(decision="REJECTED", errors=errors, plans=[])
+
+    return await submit_tasks(tasks, context, mode)

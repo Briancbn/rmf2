@@ -57,7 +57,7 @@ class CRUDOrderRecord(CRUDBase[OrderRecord, _OrderRecordCreate, _OrderRecordCrea
         return (
             db.query(OrderRecord)
             .filter(OrderRecord.internal_order_id == internal_id)
-            .order_by(OrderRecord.order_update_id.asc())
+            .order_by(OrderRecord.order_update_id.desc())
             .offset(skip)
             .limit(limit)
             .all()
