@@ -23,13 +23,14 @@ from . import crud
 from .action_factory import make_factsheet_request, make_init_position, make_state_request
 from .config import Settings
 from .logger import get_logger
+from .models import AgvConfig, AgvInitConfig
 from .models import (
     InstantActionsResult,
     OrderAssignmentResult,
     OrderBatch,
 )
-from .models import AgvConfig, AgvInitConfig
 from .transport import DeliveryMode, Heartbeat, PublisherBase, ServerTransportBase
+from .websocket import WebsocketConnectionManager
 
 LOGGER = get_logger(__name__)
 
@@ -69,12 +70,14 @@ class _MasterObserver:
         topic_prefix: str | None = None,
         heartbeat: Heartbeat | None = None,
         agv_configs: list[AgvConfig] | None = None,
+        ws_connection_manager: WebsocketConnectionManager | None = None,
     ) -> None:
         self._master = master
         self._session_factory = session_factory
         self._transport = transport
         self._topic_prefix = topic_prefix
         self._pubs: dict[str, PublisherBase] = {}
+        self._ws_connection_manager = ws_connection_manager
         self._heartbeat = heartbeat
         self._heartbeat_registered: set[str] = set()
         self._agv_configs: dict[str, AgvConfig] = {
@@ -158,6 +161,10 @@ class _MasterObserver:
             LOGGER.info("Ignoring connection for unregistered AGV: %s", agv_id)
             return
         LOGGER.info("Connection updated: %s — %s", agv_id, connection.connection_state)
+        if self._ws_connection_manager is not None:
+            self._ws_connection_manager.publish(
+                self._full_topic(f"{mfr}/{sn}/connection"), json.dumps(connection.json())
+            )
 
         if is_online:
             self._master.publish_instant_actions(mfr, sn, make_state_request(mfr, sn))
@@ -177,6 +184,10 @@ class _MasterObserver:
             self._master.publish_instant_actions(mfr, sn, instant_action)
 
         self._publish(State, f"{mfr}/{sn}/state", state)
+        if self._ws_connection_manager is not None:
+            self._ws_connection_manager.publish(
+                self._full_topic(f"{mfr}/{sn}/state"), json.dumps(state.json())
+            )
         updated = self._update_if_registered(
             mfr,
             sn,
@@ -354,6 +365,7 @@ def make_master(
     transport: ServerTransportBase | None,
     topic_prefix: str | None = None,
     heartbeat: Heartbeat | None = None,
+    ws_connection_manager: WebsocketConnectionManager | None = None,
 ) -> Generator[VDA5050Master, None, None]:
     # --- Build master and register observer callbacks ---
     base_id = config.master_mqtt_client_id or "rmf2-vda5050-master"
@@ -368,6 +380,7 @@ def make_master(
         topic_prefix=topic_prefix,
         heartbeat=heartbeat,
         agv_configs=config.agvs,
+        ws_connection_manager=ws_connection_manager,
     )
     _transport_observer = (
         _TransportObserver(master, transport, session_factory, topic_prefix=topic_prefix)

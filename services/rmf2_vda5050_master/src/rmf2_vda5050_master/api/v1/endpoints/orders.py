@@ -38,6 +38,24 @@ def get_all_orders(
     return [OrderStatus.model_validate(r, context=ctx) for r in records]
 
 
+@router.get("/active", response_model_exclude_none=True)
+def get_all_active_orders(
+    db: DbSession,
+    logger: LoggerDeps,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[PyModel[Order]]:
+    agvs = crud.agv_record.get_all_with_active_order(db, skip=skip, limit=limit)
+    orders = []
+    for agv in agvs:
+        record = crud.order_record.get_latest_by_order_id(
+            db, agv.manufacturer, agv.serial_number, agv.active_order_id
+        )
+        if record is not None:
+            orders.append(json.loads(record.order_json))
+    return orders
+
+
 @router.get("/{manufacturer}/{serial_number}", response_model_exclude_none=True)
 def get_agv_orders(
     manufacturer: str,

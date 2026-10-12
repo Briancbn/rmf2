@@ -42,6 +42,17 @@ class CRUDAgvRecord(CRUDBase[AgvRecord, _AGVRecordCreate, _AGVRecordCreate]):
             db, db_obj=self.get(db, manufacturer, serial_number), obj_in=kwargs
         )
 
+    def get_all_with_active_order(
+        self, db: Session, *, skip: int = 0, limit: int = 100
+    ) -> list[AgvRecord]:
+        return (
+            db.query(AgvRecord)
+            .filter(AgvRecord.is_onboarded == True, AgvRecord.active_order_id.isnot(None))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
     def reset_all_onboarded(self, db: Session) -> list[str]:
         records = db.query(AgvRecord).filter(AgvRecord.is_onboarded == True).all()
         agv_ids = [r.agv_id for r in records]

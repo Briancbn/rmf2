@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>WebSocket Listener</title></head>
+<body>
+<h2>WebSocket Listener</h2>
+<label for="topic">Topic:</label>
+<select id="topic">
+  <option value="/v1/states/ws">state</option>
+  <option value="/v1/connections/ws">connection</option>
+  <option value="/v1/log/ws">log</option>
+</select>
+<p id="addr"></p>
+<p id="status">Connecting…</p>
+<pre id="log"></pre>
+<script>
+var rootPath = '{root_path}';
+var ws = null;
+
+function connect() {
+  var path = rootPath + document.getElementById('topic').value;
+  var wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + path;
+  document.getElementById('addr').textContent = 'Listening to ' + wsUrl;
+  if (ws) { ws.onclose = null; ws.close(); }
+  ws = new WebSocket(wsUrl);
+  ws.onopen = function() { document.getElementById('status').textContent = 'Connected'; };
+  ws.onclose = function() { document.getElementById('status').textContent = 'Disconnected'; };
+  ws.onmessage = function(e) { document.getElementById('log').textContent += e.data + '\n'; };
+}
+
+document.getElementById('topic').addEventListener('change', function() {
+  document.getElementById('log').textContent = '';
+  connect();
+});
+
+connect();
+</script>
+</body>
+</html>

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from vda5050_core.types import State
 
 from rmf2_vda5050_master import crud
 from rmf2_vda5050_master.model_utils import PyModel
+from rmf2_vda5050_master.websocket import WebsocketConnectionManager
 
 from rmf2_vda5050_master.api.deps.db import DbSession
 from rmf2_vda5050_master.api.deps.logger import LoggerDeps
@@ -34,3 +35,15 @@ def get_state(
     if record.state_json is None:
         raise HTTPException(status_code=404, detail="No state received yet")
     return json.loads(record.state_json)
+
+
+@router.websocket("/ws")
+async def states_ws(websocket: WebSocket) -> None:
+    manager: WebsocketConnectionManager = websocket.app.state.ws_connection_manager
+    await manager.subscribe(websocket, "state")
+    try:
+        await websocket.receive()  # blocks until client disconnects
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        manager.unsubscribe(websocket, "state")

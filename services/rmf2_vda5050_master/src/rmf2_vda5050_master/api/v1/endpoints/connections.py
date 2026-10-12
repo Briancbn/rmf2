@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from rmf2_vda5050_master import crud
 from rmf2_vda5050_master.models import DeviceConnection
+from rmf2_vda5050_master.websocket import WebsocketConnectionManager
 
 from rmf2_vda5050_master.api.deps.db import DbSession
 from rmf2_vda5050_master.api.deps.logger import LoggerDeps
@@ -37,3 +38,15 @@ def get_connection(
     if record.connection_json is None:
         raise HTTPException(status_code=404, detail="No connection state received yet")
     return DeviceConnection.model_validate(json.loads(record.connection_json))
+
+
+@router.websocket("/ws")
+async def connections_ws(websocket: WebSocket) -> None:
+    manager: WebsocketConnectionManager = websocket.app.state.ws_connection_manager
+    await manager.subscribe(websocket, "connection")
+    try:
+        await websocket.receive()
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        manager.unsubscribe(websocket, "connection")

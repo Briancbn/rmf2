@@ -17,6 +17,7 @@ from .transport import (
     ServerTransportBase,
     ServerTransportZenoh,
 )
+from .websocket import WebsocketConnectionManager
 
 config = settings()
 
@@ -43,7 +44,11 @@ def _build_transport() -> ServerTransportBase | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_logging()
+    ws_connection_manager = WebsocketConnectionManager()
+    ws_connection_manager.setup()
+    app.state.ws_connection_manager = ws_connection_manager
+
+    setup_logging(ws_connection_manager)
     app.state.layout_result = None
 
     transport = _build_transport()
@@ -59,6 +64,7 @@ async def lifespan(app: FastAPI):
             transport,
             topic_prefix=_TOPIC_PREFIX,
             heartbeat=heartbeat,
+            ws_connection_manager=ws_connection_manager,
         ) as master:
             app.state.master = master
             heartbeat.start()

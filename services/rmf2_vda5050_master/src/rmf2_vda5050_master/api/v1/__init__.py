@@ -6,9 +6,11 @@ from .endpoints import (
     factsheets,
     instant_actions,
     layout,
+    log,
     orders,
     states,
     visualization,
+    ws_listener,
 )
 
 v1_router = APIRouter(prefix="/v1")
@@ -20,3 +22,5 @@ v1_router.include_router(states.router, prefix="/states", tags=["states"])
 v1_router.include_router(orders.router, prefix="/orders", tags=["orders"])
 v1_router.include_router(instant_actions.router, prefix="/instant_actions", tags=["instant_actions"])
 v1_router.include_router(visualization.router, prefix="/visualizations", tags=["visualizations"])
+v1_router.include_router(log.router, prefix="/log", tags=["log"])
+v1_router.include_router(ws_listener.router, prefix="/ws-listener", tags=["ws-listener"])
