@@ -1,0 +1,8 @@
+[submodule "services/rmf2-ui"]
+  path = services/rmf2-ui
+  url = https://github.com/Briancbn/rmf2-ui.git
+  branch = main
+[submodule "services/rmf2_task_orchestrator"]
+  path = services/rmf2_task_orchestrator
+  url = https://github.com/Briancbn/rmf2_task_orchestrator.git
+  branch = main
