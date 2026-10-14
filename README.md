@@ -72,7 +72,7 @@ docker compose -f docker-compose.dev.yml up -d
       <td>
         <p align="center">
           Warehouse Demonstration
-          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260902.zip">Download Link</a>)
+          (<a href="https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_v0.1.0.zip">Download Link</a>)
         </p>
       </td>
     </tr>
@@ -84,14 +84,14 @@ docker compose -f docker-compose.dev.yml up -d
 Download the latest simulation
 
 ```sh
-curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_20260902.zip
+curl -OL https://downloads.rmf-industrial.org/UE5Demos/RMF2_SIM_v0.1.0.zip
 ```
 
 Unzip the simulation
 
 ```sh
-unzip RMF2_SIM_20260902.zip
-cd ./RMF2_SIM_20260902
+unzip RMF2_SIM_v0.1.0.zip
+cd ./RMF2_SIM_v0.1.0
 ```
 
 Start the simulation
